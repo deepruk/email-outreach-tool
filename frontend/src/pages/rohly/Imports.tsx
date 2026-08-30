@@ -1,0 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
+import { FileSpreadsheet, Plus } from "lucide-react";
+import { apiGet } from "@/lib/api";
+import type { CsvSourceSummary } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
+
+export default function Imports() {
+  const query = useQuery({ queryKey: ["csv-sources"], queryFn: () => apiGet<CsvSourceSummary[]>("/csv/sources") });
+  return <div data-testid="imports-page"><PageHeader eyebrow="Data sources" title="CSV Imports" description="Immutable source snapshots for exact, lead-specific campaign messaging." actions={<Button onClick={() => { window.location.href = "/campaigns/new"; }} className="gap-2 bg-blue-700 hover:bg-blue-800"><Plus size={14} /> Import CSV</Button>} /><Surface testId="imports-table">{query.isLoading ? <SkeletonRows rows={6} /> : query.data?.length ? <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500"><tr><th className="px-4 py-3">File</th><th className="px-4 py-3">Rows</th><th className="px-4 py-3">Columns</th><th className="px-4 py-3">Uploaded</th></tr></thead><tbody className="divide-y divide-slate-100">{query.data.map((source) => <tr key={source.id} className="text-xs hover:bg-slate-50"><td className="px-4 py-3.5"><div className="flex items-center gap-3"><span className="flex size-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><FileSpreadsheet size={14} /></span><span className="font-semibold text-slate-900">{source.filename}</span></div></td><td className="px-4 py-3.5">{source.row_count}</td><td className="px-4 py-3.5"><p className="max-w-xl truncate text-slate-500">{source.columns.join(" · ")}</p></td><td className="px-4 py-3.5 text-slate-500">{new Date(source.uploaded_at).toLocaleString()}</td></tr>)}</tbody></table></div> : <EmptyState title="No CSV imports" description="Import a personalized lead file while creating your first campaign." />}</Surface></div>;
+}

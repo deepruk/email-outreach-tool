@@ -45,3 +45,25 @@ async def aclient():
 
 
 # --- app-specific fixtures below this line ---
+
+OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "deepanshu@rohence.com")
+OWNER_PASSWORD = os.environ.get("OWNER_PASSWORD", "Rohence@2026@")
+
+
+@pytest.fixture
+def auth_client():
+    """httpx client logged in as the owner, with the session cookie forwarded explicitly.
+
+    The rohly_session cookie is issued with Secure set (APP_URL is https), which httpx's
+    cookie jar honours and therefore won't replay over this plain-http test connection —
+    so the cookie is attached to every request via a client-level cookie jar built from the
+    login response instead of relying on jar auto-persistence.
+    """
+    with httpx.Client(base_url=API_URL, timeout=30.0) as c:
+        resp = c.post("/auth/login", json={"email": OWNER_EMAIL, "password": OWNER_PASSWORD})
+        resp.raise_for_status()
+        token = resp.cookies.get("rohly_session")
+        assert token, "login did not return rohly_session cookie"
+        c.cookies.set("rohly_session", token)
+        c.headers["Cookie"] = f"rohly_session={token}"
+        yield c

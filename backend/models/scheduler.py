@@ -20,6 +20,9 @@ class Inbox(BaseModel):
     is_mocked: bool = True
     signature: str = ""
     daily_sending_limit: int = Field(default=50, ge=1, le=2000)
+    reply_tracking_status: Literal["active", "reconnect_required", "unavailable"] = "reconnect_required"
+    sent_today: int = 0
+    last_reply_sync_at: datetime | None = None
 
 
 class InboxConnectRequest(BaseModel):

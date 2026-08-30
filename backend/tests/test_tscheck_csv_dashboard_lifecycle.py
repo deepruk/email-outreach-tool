@@ -4,8 +4,8 @@ import io
 import uuid
 
 
-def _create_and_launch(client, suffix: str):
-    inbox = client.post(
+def _create_and_launch(auth_client, suffix: str):
+    inbox = auth_client.post(
         "/workspace/inboxes/connect",
         json={"email": f"tscheck-lifecycle-{suffix}@example.com", "display_name": "tscheck lifecycle"},
     ).json()
@@ -13,7 +13,7 @@ def _create_and_launch(client, suffix: str):
         "Email,Subject,Body\n"
         f"tscheck-lifecycle-lead-{suffix}@example.com,Hello,Exact body for lifecycle test\n"
     ).encode("utf-8")
-    source = client.post(
+    source = auth_client.post(
         "/csv/sources",
         files={"file": (f"tscheck-lifecycle-{suffix}.csv", io.BytesIO(csv_bytes), "text/csv")},
     ).json()
@@ -34,19 +34,19 @@ def _create_and_launch(client, suffix: str):
         ],
         "timezone": "UTC",
     }
-    created = client.post("/csv/campaigns", json=payload)
+    created = auth_client.post("/csv/campaigns", json=payload)
     assert created.status_code == 200, created.text
     campaign_id = created.json()["id"]
-    launched = client.post(f"/csv/campaigns/{campaign_id}/launch")
+    launched = auth_client.post(f"/csv/campaigns/{campaign_id}/launch")
     assert launched.status_code == 200, launched.text
     return campaign_id
 
 
-def test_dashboard_metrics_pause_resume_stop_and_export(client):
+def test_dashboard_metrics_pause_resume_stop_and_export(auth_client):
     suffix = uuid.uuid4().hex[:8]
-    campaign_id = _create_and_launch(client, suffix)
+    campaign_id = _create_and_launch(auth_client, suffix)
 
-    listing = client.get("/csv/campaigns")
+    listing = auth_client.get("/csv/campaigns")
     assert listing.status_code == 200, listing.text
     row = next(item for item in listing.json() if item["id"] == campaign_id)
     assert row["total_leads"] == 1
@@ -56,23 +56,23 @@ def test_dashboard_metrics_pause_resume_stop_and_export(client):
     assert row["skipped_leads"] == 0
     assert row["status"] == "running"
 
-    paused = client.patch(f"/csv/campaigns/{campaign_id}/status", json={"status": "paused"})
+    paused = auth_client.patch(f"/csv/campaigns/{campaign_id}/status", json={"status": "paused"})
     assert paused.status_code == 200, paused.text
     assert paused.json()["status"] == "paused"
 
-    resumed = client.patch(f"/csv/campaigns/{campaign_id}/status", json={"status": "running"})
+    resumed = auth_client.patch(f"/csv/campaigns/{campaign_id}/status", json={"status": "running"})
     assert resumed.status_code == 200, resumed.text
     assert resumed.json()["status"] == "running"
 
-    stopped = client.patch(f"/csv/campaigns/{campaign_id}/status", json={"status": "stopped"})
+    stopped = auth_client.patch(f"/csv/campaigns/{campaign_id}/status", json={"status": "stopped"})
     assert stopped.status_code == 200, stopped.text
     assert stopped.json()["status"] == "stopped"
 
-    activity = client.get(f"/csv/campaigns/{campaign_id}/activity")
+    activity = auth_client.get(f"/csv/campaigns/{campaign_id}/activity")
     assert activity.status_code == 200, activity.text
     assert all(item["status"] == "cancelled" for item in activity.json()), "stopping must cancel pending sends"
 
-    export = client.get(f"/csv/campaigns/{campaign_id}/export")
+    export = auth_client.get(f"/csv/campaigns/{campaign_id}/export")
     assert export.status_code == 200, export.text
     assert "text/csv" in export.headers.get("content-type", "")
     body_text = export.text

@@ -7,7 +7,7 @@ import random
 import secrets
 import requests
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2.credentials import Credentials
@@ -15,6 +15,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from lib.db import db
+from routers.auth import require_user
 from models.scheduler import (
     Activity,
     Campaign,
@@ -31,11 +32,12 @@ from models.scheduler import (
     TemplateCreate,
 )
 
-router = APIRouter(prefix="/workspace", tags=["workspace"])
-oauth_router = APIRouter(prefix="/oauth/gmail", tags=["gmail-oauth"])
+router = APIRouter(prefix="/workspace", tags=["workspace"], dependencies=[Depends(require_user)])
+oauth_router = APIRouter(prefix="/oauth/gmail", tags=["gmail-oauth"], dependencies=[Depends(require_user)])
 
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly",
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
@@ -90,6 +92,7 @@ async def get_gmail_credentials(inbox_id: str) -> Credentials:
         client_id=os.environ["GOOGLE_CLIENT_ID"],
         client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
         scopes=GMAIL_SCOPES,
+        expiry=normalise_datetime(token.get("expires_at")),
     )
     expiry = normalise_datetime(token.get("expires_at"))
     if expiry and credentials.expired:
@@ -101,17 +104,17 @@ async def get_gmail_credentials(inbox_id: str) -> Credentials:
     return credentials
 
 
-async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, body: str) -> str | None:
+async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, body: str) -> dict[str, str | None]:
     credentials = await get_gmail_credentials(inbox_id)
 
-    def send() -> str | None:
+    def send() -> dict[str, str | None]:
         message = MIMEText(body, "plain", "utf-8")
         message["to"] = recipient_email
         message["subject"] = subject
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
         service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
         result = service.users().messages().send(userId="me", body={"raw": raw}).execute()
-        return result.get("id")
+        return {"message_id": result.get("id"), "thread_id": result.get("threadId")}
 
     return await asyncio.to_thread(send)
 
@@ -174,10 +177,10 @@ async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
         inbox_id = inbox["id"]
         await db.inboxes.update_one(
             {"id": inbox_id},
-            {"$set": {"is_mocked": False, "status": "connected", "last_used_at": utc_now()}},
+            {"$set": {"is_mocked": False, "status": "connected", "reply_tracking_status": "active", "last_used_at": utc_now()}},
         )
     else:
-        new_inbox = Inbox(email=email, display_name=email.split("@")[0], is_mocked=False)
+        new_inbox = Inbox(email=email, display_name=email.split("@")[0], is_mocked=False, reply_tracking_status="active")
         inbox_id = new_inbox.id
         await db.inboxes.insert_one(new_inbox.model_dump())
     await db.oauth_tokens.update_one(
@@ -240,7 +243,14 @@ async def get_dashboard() -> Overview:
 @router.get("/inboxes", response_model=list[Inbox])
 async def list_inboxes() -> list[Inbox]:
     rows = await db.inboxes.find().sort("connected_at", -1).to_list(1000)
-    return [Inbox(**row) for row in rows]
+    today = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    result = []
+    for row in rows:
+        sent_today = await db.scheduled_emails.count_documents(
+            {"inbox_id": row["id"], "status": "sent", "sent_at": {"$gte": today}}
+        )
+        result.append(Inbox(**{**row, "sent_today": sent_today}))
+    return result
 
 
 @router.post("/inboxes/connect", response_model=Inbox)

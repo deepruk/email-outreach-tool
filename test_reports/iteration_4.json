@@ -1,0 +1,82 @@
+{
+  "iteration": 4,
+  "passed": 10,
+  "failed": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [
+    "Retired obsolete check 'no-paypal-or-artificial-warmup' (encoded the pre-billing hidden-UI requirement, now superseded) and replaced it with 'inbox-health-no-artificial-warmup', which keeps the still-valid artificial-warm-up prohibition (Inbox Health page language/no fake warm-up controls) and re-asserts the current billing rule (no Subscribe/Upgrade/Checkout control renders while checkout_enabled=false). No action needed from main agent."
+  ],
+  "checks": [
+    {
+      "criterion": "Retire/rewrite obsolete no-paypal-or-artificial-warmup check to match current billing-visible requirement",
+      "name": "inbox-health-no-artificial-warmup",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "New check replacing the retired one: warmup-page text matches /Inbox Health/i and /real (delivery|sending)/i, contains 'without artificial'/'does not generate artificial conversations' language, 0 'start warm-up'/'simulate' buttons found. Then navigated to billing-page, confirmed GET /api/billing/status checkout_enabled=false, and billing-page innerText contains no subscribe/upgrade now/checkout now/buy now/pay with paypal text."
+    },
+    {
+      "criterion": "Staged Billing remains secure and regression-free: authenticated billing status/catalog, no secret, 0/8 plan IDs, checkout disabled",
+      "name": "billing-catalog-and-safe-status",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: GET /api/billing/status -> mode=live, credentials_configured=true, configured_plan_ids=0, product_id_configured=false, webhook_configured=false, checkout_enabled=false; response text has no client_secret/raw secret; paypal-configuration shows '0/8 plan IDs' + pending; no subscribe/upgrade/checkout/buy text on page; plan cards show $39/$79/$149/$299 monthly and 374.4/758.4/1,430.4/2,870.4 annual."
+    },
+    {
+      "criterion": "Staged Billing remains secure and regression-free (API layer: status/catalog, no secret leak)",
+      "name": "test_tscheck_billing.py::test_billing_status_is_safe_and_pending",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Backend suite re-run: 18 passed in 4.23s. GET /api/billing/status unauthenticated -> 401; authenticated -> 200 with mode=live, configured_plan_ids=0, product_id_configured=false, webhook_configured=false, checkout_enabled=false; body contains no client_secret key or raw secret."
+    },
+    {
+      "criterion": "Staged Billing remains secure and regression-free (API layer: exact catalog prices)",
+      "name": "test_tscheck_billing.py::test_billing_plans_match_approved_catalog",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/billing/plans -> 200 with starter{39.0/374.4}, growth{79.0/758.4}, scale{149.0/1430.4}, agency{299.0/2870.4}; all *_plan_id_configured=false; no secret in response."
+    },
+    {
+      "criterion": "Owner login remains healthy",
+      "name": "auth-login-logout-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: unauthenticated visit redirected to /login; deepanshu@rohence.com login landed on dashboard-page; logout returned to /login."
+    },
+    {
+      "criterion": "Core Rohly application shell remains healthy",
+      "name": "shell-navigation-render",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: sidebar/topbar render, all nav items incl. Billing load their own data-testid page, help panel opens; no uncaught page errors."
+    },
+    {
+      "criterion": "Core Rohly application shell remains healthy (sidebar persistence, keyboard nav)",
+      "name": "sidebar-persist-and-keyboard-nav",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: sidebar collapse persists across reload; Ctrl+K opens command palette hitting GET /api/product/search; 'n' shortcut navigates to /campaigns/new."
+    },
+    {
+      "criterion": "Core outbound data remains intact",
+      "name": "campaigns-leads-imports-inboxes-data",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: leads/campaigns/imports/inboxes/health/analytics pages render with API-backed data; GET /api/product/leads, /api/csv/sources, /api/workspace/inboxes all 200."
+    },
+    {
+      "criterion": "Core outbound data remains intact (unified inbox)",
+      "name": "unified-inbox-reply-foundation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: GET /api/product/replies -> 200 empty array; sync endpoint responds <500."
+    },
+    {
+      "criterion": "Full backend regression suite stays green after billing staging",
+      "name": "backend-pytest-suite",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q: '18 passed, 3 warnings in 4.23s' covering auth/session, billing, campaigns, leads/imports/inboxes, csv lifecycle/multi-inbox/preview/sequence-timezone, dashboard, recipients, template builder/templates, unified inbox replies."
+    }
+  ]
+}

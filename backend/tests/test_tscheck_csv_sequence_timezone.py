@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 
-def test_launch_schedules_using_configured_day_time_and_timezone(client):
+def test_launch_schedules_using_configured_day_time_and_timezone(auth_client):
     suffix = uuid.uuid4().hex[:8]
 
-    inbox = client.post(
+    inbox = auth_client.post(
         "/workspace/inboxes/connect",
         json={"email": f"tscheck-tz-{suffix}@example.com", "display_name": "tscheck timezone"},
     ).json()
@@ -18,7 +18,7 @@ def test_launch_schedules_using_configured_day_time_and_timezone(client):
         "Email,Subject,Body\n"
         f"tscheck-tz-lead-{suffix}@example.com,Hello there,Exact body\n"
     ).encode("utf-8")
-    source = client.post(
+    source = auth_client.post(
         "/csv/sources",
         files={"file": (f"tscheck-tz-{suffix}.csv", io.BytesIO(csv_bytes), "text/csv")},
     ).json()
@@ -43,14 +43,14 @@ def test_launch_schedules_using_configured_day_time_and_timezone(client):
         ],
         "timezone": tz_name,
     }
-    created = client.post("/csv/campaigns", json=payload)
+    created = auth_client.post("/csv/campaigns", json=payload)
     assert created.status_code == 200, created.text
     campaign_id = created.json()["id"]
 
-    launched = client.post(f"/csv/campaigns/{campaign_id}/launch")
+    launched = auth_client.post(f"/csv/campaigns/{campaign_id}/launch")
     assert launched.status_code == 200, launched.text
 
-    activity = client.get(f"/csv/campaigns/{campaign_id}/activity")
+    activity = auth_client.get(f"/csv/campaigns/{campaign_id}/activity")
     assert activity.status_code == 200, activity.text
     items = activity.json()
     assert len(items) == 1, items

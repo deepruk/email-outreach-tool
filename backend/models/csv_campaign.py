@@ -62,6 +62,8 @@ class CsvCampaign(BaseModel):
     follow_ups_scheduled: int = 0
     failed_emails: int = 0
     skipped_leads: int = 0
+    replies: int = 0
+    positive_replies: int = 0
     status: Literal["draft", "scheduled", "running", "paused", "stopped", "completed"] = "draft"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     launched_at: datetime | None = None
@@ -101,6 +103,8 @@ class ScheduledEmail(BaseModel):
     error: str | None = None
     sent_at: datetime | None = None
     message_id: str | None = None
+    thread_id: str | None = None
+    replied_at: datetime | None = None
 
 
 class CsvCampaignLaunchResponse(BaseModel):

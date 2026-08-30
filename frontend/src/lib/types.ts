@@ -9,7 +9,24 @@ export interface Inbox {
   is_mocked: boolean;
   signature: string;
   daily_sending_limit: number;
+  reply_tracking_status: "active" | "reconnect_required" | "unavailable";
+  sent_today: number;
+  last_reply_sync_at: string | null;
 }
+
+export interface UserPublic { id: string; email: string; name: string; role: string; created_at: string }
+export interface Metric { label: string; value: number; change: number | null }
+export interface ChartPoint { date: string; sends: number; replies: number; positive_replies: number }
+export interface CampaignPerformance { id: string; name: string; status: string; source: string; leads: number; sent: number; replies: number; positive_replies: number; reply_rate: number; progress: number; created_at: string }
+export interface CommandCenter { emails_sent: Metric; replies: Metric; positive_replies: Metric; active_campaigns: Metric; scheduled: number; failed: number; inboxes_needing_attention: number; chart: ChartPoint[]; campaigns: CampaignPerformance[] }
+export interface SearchResult { id: string; type: "campaign" | "lead" | "inbox" | "reply"; title: string; subtitle: string; href: string }
+export interface LeadSummary { id: string; name: string; email: string; company: string; campaign_id: string; campaign_name: string; status: string; last_activity: string | null; next_step: string | null; next_step_at: string | null; inbox_email: string; paused: boolean }
+export interface LeadPage { items: LeadSummary[]; total: number; page: number; page_size: number }
+export interface Reply { id: string; gmail_message_id: string; thread_id: string; inbox_id: string; inbox_email: string; campaign_id: string; campaign_name: string; recipient_email: string; sender_name: string; subject: string; snippet: string; received_at: string; sentiment: "unclassified" | "positive" | "neutral" | "negative"; read: boolean }
+export interface InboxHealth { id: string; email: string; display_name: string; status: string; reply_tracking_status: string; daily_limit: number; sent_today: number; utilization: number; health_score: number; health: "healthy" | "attention" | "disconnected"; failed_last_7_days: number; last_activity: string | null }
+export interface AnalyticsSummary { date_range_days: number; emails_sent: number; replies: number; positive_replies: number; failed: number; reply_rate: number; positive_reply_rate: number; bounce_rate: number; chart: ChartPoint[]; campaign_comparison: CampaignPerformance[]; inbox_performance: InboxHealth[] }
+export interface BillingConfiguration { provider: string; mode: string; credentials_configured: boolean; product_id_configured: boolean; configured_plan_ids: number; required_plan_ids: number; webhook_configured: boolean; checkout_enabled: boolean; webhook_url: string }
+export interface BillingPlan { key: string; name: string; monthly_price: number; annual_price: number; monthly_email_limit: number; inbox_limit: number; contact_limit: number; features: string[]; monthly_plan_id_configured: boolean; annual_plan_id_configured: boolean }
 
 export interface CsvSource {
   id: string;
@@ -82,6 +99,8 @@ export interface CsvCampaign {
   follow_ups_scheduled: number;
   failed_emails: number;
   skipped_leads: number;
+  replies: number;
+  positive_replies: number;
   status: "draft" | "scheduled" | "running" | "paused" | "stopped" | "completed";
   created_at: string;
   launched_at: string | null;
@@ -112,6 +131,8 @@ export interface ScheduledEmail {
   error: string | null;
   sent_at: string | null;
   message_id: string | null;
+  thread_id: string | null;
+  replied_at: string | null;
 }
 
 export interface Recipient {

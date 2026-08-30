@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta, timezone
 from io import StringIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from lib.db import db
@@ -22,8 +22,9 @@ from models.csv_campaign import (
 )
 from models.scheduler import Inbox
 from routers.scheduler import send_gmail_message
+from routers.auth import require_user
 
-router = APIRouter(prefix="/csv", tags=["csv-campaigns"])
+router = APIRouter(prefix="/csv", tags=["csv-campaigns"], dependencies=[Depends(require_user)])
 
 
 def clean_row(row: dict[str | None, str | None], columns: list[str]) -> dict[str, str]:
@@ -357,12 +358,12 @@ async def process_due_sends() -> None:
                     await db.csv_campaigns.update_one({"id": row["campaign_id"]}, {"$inc": {"failed_emails": 1}})
                     continue
                 try:
-                    message_id = await send_gmail_message(
+                    send_result = await send_gmail_message(
                         row["inbox_id"], row["recipient_email"], row["subject"], row["body"]
                     )
                     await db.scheduled_emails.update_one(
                         {"id": row["id"]},
-                        {"$set": {"status": "sent", "sent_at": now, "message_id": message_id}},
+                        {"$set": {"status": "sent", "sent_at": now, **send_result}},
                     )
                     await db.csv_campaigns.update_one(
                         {"id": row["campaign_id"]}, {"$inc": {"emails_sent": 1, "emails_scheduled": -1}}

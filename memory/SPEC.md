@@ -1,9 +1,17 @@
-# Mailflow Scheduler — Living Spec
+# Rohly — Living Spec
 
 ## Purpose
-Mailflow Scheduler is a professional operations dashboard for sending campaign emails from multiple Gmail inboxes with a server-controlled randomized gap between each send.
+Rohly is a protected B2B outbound command center for sending personalized campaign emails from multiple Gmail inboxes with server-controlled scheduling and reply-aware follow-up cancellation.
 
-The primary workspace owner shown in the interface is Deepanshu.
+The primary owner is Deepanshu. Email/password authentication uses a secure httpOnly session cookie; credentials are maintained in `memory/test_credentials.md`.
+
+## Phase 1 product shell
+- Fixed/collapsible sidebar with persisted state, responsive drawer, breadcrumbs, command search (`Cmd/Ctrl+K`), `N` campaign shortcut, Help, profile, and real logout.
+- Real pages: Dashboard, Campaigns, campaign detail tabs, Leads, Unified Inbox, Inboxes, Inbox Health, Analytics, CSV Imports, Settings, CSV campaign source selection, and reusable Rohly Template builder.
+- PayPal production credentials are secured server-side. Billing now exposes a real configuration-status page and the approved Starter/Growth/Scale/Agency monthly and annual catalog. Checkout remains disabled until one Product ID, eight Plan IDs, and a Webhook ID are supplied; no fake checkout is exposed.
+- Inbox Health uses real send utilization, failures, connection state, and reply-access state. Rohly does not manufacture artificial warm-up conversations.
+- Gmail OAuth requests send + read-only scopes. Connected inboxes must be reconnected once to activate reply detection.
+- Reply sync matches Gmail thread IDs to sent campaign emails, records conversations, and cancels future scheduled follow-ups for the replied lead.
 
 ## Current data model
 - **Inbox**: Gmail address, display name, connection status, provider, last-used time, and whether the record is seeded MOCKED data.

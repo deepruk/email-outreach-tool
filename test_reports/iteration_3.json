@@ -1,0 +1,89 @@
+{
+  "iteration": 3,
+  "passed": 11,
+  "failed": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [
+    "note: existing browser check 'no-paypal-or-artificial-warmup' now fails because the Billing feature was intentionally added to the sidebar this iteration; that check encoded the PRE-billing requirement ('no PayPal UI exposed') which the current acceptance_matrix explicitly supersedes with billing criteria. Not a regression/bug -- the check itself is obsolete and was excluded from this report's checks[]. Recommend the main agent either delete/retire that check or rewrite it to assert 'no purchase/checkout action is rendered while checkout_enabled=false' (which the new billing-catalog-and-safe-status check already covers)."
+  ],
+  "checks": [
+    {
+      "criterion": "Existing Rohly authentication and application shell remain healthy after billing staging",
+      "name": "auth-login-logout-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: unauthenticated visit redirected to /login; owner login landed on dashboard-page; logout returned to /login. No change from prior iteration."
+    },
+    {
+      "criterion": "Existing Rohly authentication and application shell remain healthy after billing staging",
+      "name": "shell-navigation-render",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: sidebar/topbar render, all nav items (incl. new Billing entry) load their own data-testid page, help panel opens; no uncaught page errors."
+    },
+    {
+      "criterion": "Existing Rohly authentication and application shell remain healthy after billing staging",
+      "name": "sidebar-persist-and-keyboard-nav",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: sidebar collapse persists across reload; Ctrl+K opens command palette and hits GET /api/product/search; 'n' shortcut navigates to /campaigns/new."
+    },
+    {
+      "criterion": "PayPal live credentials are staged securely",
+      "name": "billing-catalog-and-safe-status",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "GET /api/billing/status (authenticated) -> 200 body {mode:'live', credentials_configured:true, product_id_configured:false, configured_plan_ids:0, webhook_configured:false, checkout_enabled:false}; response text verified to contain neither 'client_secret' nor the raw PAYPAL_CLIENT_SECRET value."
+    },
+    {
+      "criterion": "PayPal live credentials are staged securely (API layer)",
+      "name": "test_tscheck_billing.py::test_billing_status_is_safe_and_pending",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/billing/status with no cookie -> 401 (test_billing_status_requires_auth); authenticated GET /api/billing/status -> 200 with mode=live, credentials_configured=true, product_id_configured=false, configured_plan_ids=0, webhook_configured=false, checkout_enabled=false; response body/text contains no 'client_secret' key and not the raw secret string."
+    },
+    {
+      "criterion": "The approved Rohly billing catalog is exact",
+      "name": "billing-catalog-and-safe-status",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "billing-page rendered billing-plan-starter/growth/scale/agency cards showing $39/$79/$149/$299 monthly; Annual toggle switched displayed prices to 374.4/758.4/1,430.4/2,870.4."
+    },
+    {
+      "criterion": "The approved Rohly billing catalog is exact (API layer)",
+      "name": "test_tscheck_billing.py::test_billing_plans_match_approved_catalog",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/billing/plans -> 200 with starter{39.0/374.4}, growth{79.0/758.4}, scale{149.0/1430.4}, agency{299.0/2870.4}; all monthly_plan_id_configured/annual_plan_id_configured=false; no secret in response text."
+    },
+    {
+      "criterion": "Incomplete PayPal configuration cannot create a fake or unsafe checkout",
+      "name": "billing-catalog-and-safe-status",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "status.configured_plan_ids===0, product_id_configured===false, webhook_configured===false, checkout_enabled===false confirmed via direct /api/billing/status call from the browser context; paypal-configuration surface shows '0/8 plan IDs' and pending badges; billing-page innerText contains no subscribe/upgrade now/checkout now/buy now control."
+    },
+    {
+      "criterion": "Billing UI matches the Rohly production design system",
+      "name": "billing-catalog-and-safe-status",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Billing reached via the persistent sidebar link (same AppShell nav used by all other pages); billing-page uses the shared PageHeader/Surface primitives, compact badge styling matching other pages' status badges, a responsive lg:grid-cols-4 plan grid, and an explicit 'Next PayPal configuration values' setup message with the webhook URL -- consistent with the rest of Rohly's cobalt-neutral surfaces."
+    },
+    {
+      "criterion": "Core outbound data remains intact",
+      "name": "campaigns-leads-imports-inboxes-data",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: leads/campaigns/imports/inboxes/health/analytics pages all render with real API-backed data; GET /api/product/leads, /api/csv/sources, /api/workspace/inboxes all 200."
+    },
+    {
+      "criterion": "Core outbound data remains intact",
+      "name": "unified-inbox-reply-foundation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: GET /api/product/replies -> 200 empty array (clean workspace, unchanged); sync endpoint responds <500."
+    }
+  ]
+}

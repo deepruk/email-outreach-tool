@@ -1,0 +1,103 @@
+{
+  "iteration": 2,
+  "passed": 13,
+  "failed": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [
+    "note: legacy iteration_1.json backend tests (test_tscheck_campaigns.py, test_tscheck_inboxes.py, test_tscheck_recipients.py, test_tscheck_templates.py, test_tscheck_csv_*.py) were written before real auth existed and started failing with KeyError('id') once /api/workspace/* and /api/csv/* endpoints began requiring an authenticated session cookie (a legitimate product change for this iteration, not a regression). Repointed them from the anonymous `client` fixture to the new `auth_client` fixture (added to conftest.py) so they log in first; all now pass and remain valid regression coverage."
+  ],
+  "checks": [
+    {
+      "criterion": "Rohly requires real email/password authentication and supports logout",
+      "name": "auth-login-logout-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Unauthenticated visit to / redirected to /login; deepanshu@rohence.com / Rohence@2026@ signed in and landed on dashboard-page; profile menu Logout returned to /login."
+    },
+    {
+      "criterion": "Rohly requires real email/password authentication and supports logout (API layer)",
+      "name": "test_tscheck_auth_session.py::test_login_grants_session_and_protects_product_apis",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/product/dashboard with no cookie -> 401; POST /api/auth/login with wrong password -> 401; with correct credentials -> 200 with matching email; authenticated GET /api/product/dashboard -> 200; POST /api/auth/logout -> 204; GET /api/product/dashboard after logout -> 401."
+    },
+    {
+      "criterion": "The production SaaS shell is consistent, responsive, and operable",
+      "name": "shell-navigation-render",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "desktop-sidebar, topbar, and current-page breadcrumb visible after login; clicked through Dashboard/Campaigns/Leads/Unified Inbox/Inboxes/Inbox Health/Analytics/CSV Imports/Settings nav items, each landing page's own data-testid rendered; help-button opened help-panel; no uncaught page errors collected during navigation."
+    },
+    {
+      "criterion": "Sidebar state and keyboard-first navigation work",
+      "name": "sidebar-persist-and-keyboard-nav",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "sidebar-collapse-button toggled desktop-sidebar to w-[68px]; state survived a full page reload; Ctrl+K opened command-palette and triggered GET /api/product/search; Escape closed it; pressing 'n' with focus outside any input navigated to /campaigns/new."
+    },
+    {
+      "criterion": "Dashboard is a real outbound command center",
+      "name": "dashboard-command-center",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "GET /api/product/dashboard returned 200 while dashboard-page rendered; attention-panel (Operations) and active-campaigns-table both visible; KPI card grid rendered; 'Review inbox health' link navigated to warmup-page."
+    },
+    {
+      "criterion": "Dashboard is a real outbound command center (API layer)",
+      "name": "test_tscheck_dashboard.py::test_dashboard_returns_kpis_chart_and_campaigns",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/product/dashboard -> 200; emails_sent/replies/positive_replies/active_campaigns metrics present with value fields; chart array length == 14; campaigns is a list."
+    },
+    {
+      "criterion": "Campaign creation clearly supports CSV Personalized and Rohly Template",
+      "name": "campaign-creation-sources",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Create campaign opened campaign-source-page with distinct choose-csv-card and choose-template-card; CSV card navigated to /campaigns/new/csv (mapping wizard entry); Template card opened template-builder-page with template-editor + live template-preview reflecting typed name/subject/body substitutions (ABC Corp / John); Save template triggered POST /api/workspace/templates -> 200."
+    },
+    {
+      "criterion": "Campaign creation clearly supports CSV Personalized and Rohly Template (save API)",
+      "name": "test_tscheck_template_builder.py::test_create_rohly_template_persists_and_lists",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/workspace/templates with a tscheck-template-<uuid> fixture -> 200 with matching name/subject/body; GET /api/workspace/templates lists the created id."
+    },
+    {
+      "criterion": "Campaigns, campaign detail, leads, imports, inboxes, health, and analytics use real data and actions",
+      "name": "campaigns-leads-imports-inboxes-data",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "campaigns-page shows campaign-search-input; leads-page's GET /api/product/leads returned 200 and searching an unmatched term surfaced the 'No scheduled leads' empty state; imports-page's GET /api/csv/sources returned 200; inboxes-page's GET /api/workspace/inboxes returned 200 and listed deepanshu@rohence.com/tryrohence.com; warmup-page (Inbox Health) and analytics-page (email-volume-chart) rendered."
+    },
+    {
+      "criterion": "Campaigns, campaign detail, leads, imports, inboxes, health, and analytics use real data and actions (API layer)",
+      "name": "test_tscheck_campaigns_leads_imports_inboxes.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/product/leads?q= -> 200 with items/total/page/page_size; q=tscheck-no-such-lead-xyz -> total=0; GET /api/csv/sources -> 200 list; GET /api/workspace/inboxes -> 200 with deepanshu@rohence.com/tryrohence.com present; GET /api/product/inbox-health -> 200 rows carry health_score/utilization; GET /api/product/analytics?days=30 -> 200."
+    },
+    {
+      "criterion": "Unified Inbox has real Gmail reply foundations",
+      "name": "unified-inbox-reply-foundation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "GET /api/product/replies returned 200 with an empty array (matches seed fact of a clean workspace); UI correctly showed the inbox-empty reconnect/empty state (not the 3-panel UI, since there are zero reply rows); sync-replies-button triggered POST /api/product/replies/sync which returned <500."
+    },
+    {
+      "criterion": "Unified Inbox has real Gmail reply foundations (API layer)",
+      "name": "test_tscheck_unified_inbox_replies.py::test_replies_list_and_sync_are_real_endpoints",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/product/replies -> 200 list; POST /api/product/replies/sync -> status code < 500 (no crash from real Gmail sync path)."
+    },
+    {
+      "criterion": "No nonfunctional PayPal or artificial warm-up UI is exposed",
+      "name": "no-paypal-or-artificial-warmup",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Sidebar text contains no billing/pricing/checkout/paypal terms; Settings shows a non-interactive Billing row explicitly labeled 'Hidden'; Inbox Health page (warmup-page) is titled 'Inbox Health', states it 'does not generate artificial conversations or manipulate provider engagement', and exposes no start-warm-up/simulate control."
+    }
+  ]
+}

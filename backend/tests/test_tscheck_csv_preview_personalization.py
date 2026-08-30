@@ -9,15 +9,15 @@ STEPS = [
 ]
 
 
-def _upload_fixture(client):
+def _upload_fixture(auth_client):
     with open(FIXTURE_PATH, "rb") as fh:
-        response = client.post("/csv/sources", files={"file": ("personalized-leads.csv", fh, "text/csv")})
+        response = auth_client.post("/csv/sources", files={"file": ("personalized-leads.csv", fh, "text/csv")})
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def test_preview_keeps_exact_per_lead_copy_and_skips_incomplete_row(client):
-    source = _upload_fixture(client)
+def test_preview_keeps_exact_per_lead_copy_and_skips_incomplete_row(auth_client):
+    source = _upload_fixture(auth_client)
     assert source["row_count"] == 3
 
     payload = {
@@ -35,7 +35,7 @@ def test_preview_keeps_exact_per_lead_copy_and_skips_incomplete_row(client):
     # but the preview endpoint only needs source/columns; supply a placeholder id which is unused by preview logic.
     payload["inbox_ids"] = ["placeholder-inbox-id"]
 
-    response = client.post("/csv/campaigns/preview", json=payload)
+    response = auth_client.post("/csv/campaigns/preview", json=payload)
     assert response.status_code == 200, response.text
     body = response.json()
 

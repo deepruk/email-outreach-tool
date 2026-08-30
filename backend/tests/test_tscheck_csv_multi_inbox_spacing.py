@@ -14,20 +14,20 @@ def _make_csv_bytes(suffix: str, rows: int) -> bytes:
     return "".join(lines).encode("utf-8")
 
 
-def test_launch_distributes_leads_across_inboxes_with_spaced_repeat_sends(client):
+def test_launch_distributes_leads_across_inboxes_with_spaced_repeat_sends(auth_client):
     suffix = uuid.uuid4().hex[:8]
 
-    inbox_a = client.post(
+    inbox_a = auth_client.post(
         "/workspace/inboxes/connect",
         json={"email": f"tscheck-spacing-a-{suffix}@example.com", "display_name": "tscheck spacing A"},
     ).json()
-    inbox_b = client.post(
+    inbox_b = auth_client.post(
         "/workspace/inboxes/connect",
         json={"email": f"tscheck-spacing-b-{suffix}@example.com", "display_name": "tscheck spacing B"},
     ).json()
 
     csv_bytes = _make_csv_bytes(suffix, rows=4)
-    source = client.post(
+    source = auth_client.post(
         "/csv/sources",
         files={"file": (f"tscheck-spacing-{suffix}.csv", io.BytesIO(csv_bytes), "text/csv")},
     ).json()
@@ -49,16 +49,16 @@ def test_launch_distributes_leads_across_inboxes_with_spaced_repeat_sends(client
         ],
         "timezone": "UTC",
     }
-    created = client.post("/csv/campaigns", json=payload)
+    created = auth_client.post("/csv/campaigns", json=payload)
     assert created.status_code == 200, created.text
     campaign_id = created.json()["id"]
 
-    launched = client.post(f"/csv/campaigns/{campaign_id}/launch")
+    launched = auth_client.post(f"/csv/campaigns/{campaign_id}/launch")
     assert launched.status_code == 200, launched.text
     launch_body = launched.json()
     assert launch_body["scheduled_count"] == 4, launch_body
 
-    activity = client.get(f"/csv/campaigns/{campaign_id}/activity")
+    activity = auth_client.get(f"/csv/campaigns/{campaign_id}/activity")
     assert activity.status_code == 200, activity.text
     items = activity.json()
     assert len(items) == 4

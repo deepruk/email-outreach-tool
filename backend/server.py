@@ -12,6 +12,9 @@ import uuid
 from datetime import datetime
 from routers.scheduler import oauth_router, router as scheduler_router
 from routers.csv_campaigns import process_due_sends, router as csv_campaigns_router
+from routers.auth import ensure_owner, router as auth_router
+from routers.product import process_reply_sync, router as product_router
+from routers.billing import router as billing_router
 
 
 ROOT_DIR = Path(__file__).parent
@@ -24,9 +27,12 @@ from lib.db import client, db
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await ensure_owner()
     sender_task = asyncio.create_task(process_due_sends())
+    reply_task = asyncio.create_task(process_reply_sync())
     yield
     sender_task.cancel()
+    reply_task.cancel()
     client.close()
 
 
@@ -82,6 +88,9 @@ logger = logging.getLogger(__name__)
 api_router.include_router(scheduler_router)
 api_router.include_router(oauth_router)
 api_router.include_router(csv_campaigns_router)
+api_router.include_router(auth_router)
+api_router.include_router(product_router)
+api_router.include_router(billing_router)
 
 # Include the router in the main app last so every endpoint is served under /api.
 app.include_router(api_router)
