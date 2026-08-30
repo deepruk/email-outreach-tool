@@ -11,12 +11,15 @@ from fastapi.responses import StreamingResponse
 from lib.db import db
 from models.csv_campaign import (
     CampaignStatusRequest,
+    CampaignEditImpact,
+    CampaignEditResult,
     CsvCampaign,
     CsvCampaignCreate,
     CsvCampaignLaunchResponse,
     CsvCampaignPreview,
     CsvCampaignPreviewLead,
     CsvSource,
+    CsvSourceDeriveRequest,
     CsvSourceSummary,
     ScheduledEmail,
 )
@@ -91,6 +94,127 @@ def preview_from_source(source: CsvSource, input: CsvCampaignCreate, limit: int 
     return CsvCampaignPreview(leads=leads, valid_count=valid_count, skipped_count=skipped_count)
 
 
+async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tuple[list[ScheduledEmail], int]:
+    source_row = await db.csv_sources.find_one({"id": input.source_id})
+    if not source_row:
+        raise HTTPException(status_code=404, detail="CSV source not found")
+    source = CsvSource(**source_row)
+    preview = preview_from_source(source, input, limit=0)
+    inbox_rows = await db.inboxes.find({"id": {"$in": input.inbox_ids}, "status": "connected"}).to_list(100)
+    inbox_lookup = {row["id"]: Inbox(**row) for row in inbox_rows}
+    inboxes = [inbox_lookup[inbox_id] for inbox_id in input.inbox_ids if inbox_id in inbox_lookup]
+    if len(inboxes) != len(set(input.inbox_ids)):
+        raise HTTPException(status_code=422, detail="Select connected inboxes only")
+    try:
+        zone = ZoneInfo(input.timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise HTTPException(status_code=422, detail="Choose a valid timezone") from exc
+    now_local = datetime.now(zone)
+    existing_other = await db.scheduled_emails.find({
+        "campaign_id": {"$ne": campaign_id},
+        "inbox_id": {"$in": input.inbox_ids},
+        "status": {"$nin": ["cancelled", "skipped"]},
+    }).to_list(100000)
+    usage: dict[tuple[str, str], int] = {}
+    for item in existing_other:
+        value = item.get("scheduled_at")
+        if value:
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            key = (item["inbox_id"], value.astimezone(zone).date().isoformat())
+            usage[key] = usage.get(key, 0) + 1
+    last_slots: dict[tuple[str, str], datetime] = {}
+    scheduled: list[ScheduledEmail] = []
+    inbox_index = 0
+    for row_index, row in enumerate(source.rows, start=2):
+        email = row.get(input.email_column, "").strip()
+        if not email or "@" not in email:
+            continue
+        if any(not row.get(step.subject_column, "") or not row.get(step.body_column, "") for step in input.steps):
+            continue
+        for step in input.steps:
+            try:
+                hour, minute = [int(value) for value in step.send_time.split(":", 1)]
+                base_send = datetime.combine(
+                    now_local.date() + timedelta(days=step.day_offset), time(hour=hour, minute=minute), zone
+                )
+            except (ValueError, TypeError) as exc:
+                raise HTTPException(status_code=422, detail=f"Invalid send time for {step.label}") from exc
+            if step.day_offset == 0 and base_send <= now_local:
+                base_send = now_local + timedelta(minutes=1)
+            selected: Inbox | None = None
+            selected_send = base_send
+            for _ in range(len(inboxes)):
+                candidate = inboxes[inbox_index % len(inboxes)]
+                inbox_index += 1
+                previous = last_slots.get((candidate.id, step.key))
+                deterministic_gap = random.Random(f"{campaign_id}:{candidate.id}:{step.key}:{row_index}").randint(10, 20)
+                candidate_send = base_send if not previous else max(base_send, previous + timedelta(minutes=deterministic_gap))
+                usage_key = (candidate.id, candidate_send.date().isoformat())
+                if usage.get(usage_key, 0) < candidate.daily_sending_limit:
+                    selected = candidate
+                    selected_send = candidate_send
+                    usage[usage_key] = usage.get(usage_key, 0) + 1
+                    last_slots[(candidate.id, step.key)] = candidate_send
+                    break
+            if not selected:
+                raise HTTPException(status_code=409, detail=f"Daily inbox limits are too low for {base_send.date().isoformat()}")
+            scheduled.append(ScheduledEmail(
+                campaign_id=campaign_id,
+                campaign_name=input.name,
+                source_id=source.id,
+                row_index=row_index,
+                recipient_email=email,
+                first_name=row.get(input.first_name_column or "", ""),
+                company=row.get(input.company_column or "", ""),
+                step_key=step.key,
+                step_label=step.label,
+                subject=row[step.subject_column],
+                body=row[step.body_column],
+                inbox_id=selected.id,
+                scheduled_at=selected_send.astimezone(timezone.utc),
+            ))
+    return scheduled, preview.skipped_count
+
+
+async def calculate_edit_impact(campaign_id: str, proposed: list[ScheduledEmail], skipped: int) -> CampaignEditImpact:
+    existing = await db.scheduled_emails.find({"campaign_id": campaign_id}).to_list(100000)
+    protected_rows = [row for row in existing if row.get("status") in {"sent", "failed"} or row.get("replied_at")]
+    future_rows = [row for row in existing if row.get("status") == "scheduled" and not row.get("replied_at")]
+    protected_keys = {(row["recipient_email"].lower(), row["step_key"]) for row in protected_rows}
+    existing_by_key = {(row["recipient_email"].lower(), row["step_key"]): row for row in future_rows}
+    proposed_by_key = {
+        (row.recipient_email.lower(), row.step_key): row
+        for row in proposed
+        if (row.recipient_email.lower(), row.step_key) not in protected_keys
+    }
+    added = len(set(proposed_by_key) - set(existing_by_key))
+    removed = len(set(existing_by_key) - set(proposed_by_key))
+    unchanged = 0
+    rescheduled = 0
+    for key in set(existing_by_key) & set(proposed_by_key):
+        old = existing_by_key[key]
+        new = proposed_by_key[key]
+        old_time = old["scheduled_at"].replace(tzinfo=timezone.utc) if old["scheduled_at"].tzinfo is None else old["scheduled_at"]
+        same = (
+            old.get("subject") == new.subject
+            and old.get("body") == new.body
+            and old.get("inbox_id") == new.inbox_id
+            and old_time == new.scheduled_at
+        )
+        unchanged += int(same)
+        rescheduled += int(not same)
+    return CampaignEditImpact(
+        added=added,
+        removed=removed,
+        rescheduled=rescheduled,
+        unchanged=unchanged,
+        protected=len(protected_rows),
+        skipped_leads=skipped,
+        proposed_scheduled=len(proposed_by_key),
+    )
+
+
 @router.post("/sources", response_model=CsvSource)
 async def upload_csv(file: UploadFile = File(...)) -> CsvSource:
     if not file.filename or not file.filename.lower().endswith(".csv"):
@@ -118,6 +242,31 @@ async def upload_csv(file: UploadFile = File(...)) -> CsvSource:
 async def list_sources() -> list[CsvSourceSummary]:
     rows = await db.csv_sources.find({}, {"rows": 0}).sort("uploaded_at", -1).to_list(100)
     return [CsvSourceSummary(**row) for row in rows]
+
+
+@router.get("/sources/{source_id}", response_model=CsvSource)
+async def get_source(source_id: str) -> CsvSource:
+    row = await db.csv_sources.find_one({"id": source_id})
+    if not row:
+        raise HTTPException(status_code=404, detail="CSV source not found")
+    return CsvSource(**row)
+
+
+@router.post("/sources/{source_id}/derive", response_model=CsvSource)
+async def derive_source(source_id: str, input: CsvSourceDeriveRequest) -> CsvSource:
+    row = await db.csv_sources.find_one({"id": source_id})
+    if not row:
+        raise HTTPException(status_code=404, detail="CSV source not found")
+    original = CsvSource(**row)
+    normalized = [{column: str(item.get(column, "")) for column in original.columns} for item in input.rows]
+    source = CsvSource(
+        filename=f"edited-{original.filename}",
+        columns=original.columns,
+        row_count=len(normalized),
+        rows=normalized,
+    )
+    await db.csv_sources.insert_one(source.model_dump())
+    return source
 
 
 @router.post("/campaigns/preview", response_model=CsvCampaignPreview)
@@ -158,6 +307,56 @@ async def create_campaign(input: CsvCampaignCreate) -> CsvCampaign:
 async def list_campaigns() -> list[CsvCampaign]:
     rows = await db.csv_campaigns.find().sort("created_at", -1).to_list(500)
     return [CsvCampaign(**row) for row in rows]
+
+
+@router.post("/campaigns/{campaign_id}/edit-impact", response_model=CampaignEditImpact)
+async def preview_edit_impact(campaign_id: str, input: CsvCampaignCreate) -> CampaignEditImpact:
+    if not await db.csv_campaigns.find_one({"id": campaign_id}):
+        raise HTTPException(status_code=404, detail="CSV campaign not found")
+    proposed, skipped = await build_edit_schedule(campaign_id, input)
+    return await calculate_edit_impact(campaign_id, proposed, skipped)
+
+
+@router.put("/campaigns/{campaign_id}", response_model=CampaignEditResult)
+async def edit_campaign(campaign_id: str, input: CsvCampaignCreate) -> CampaignEditResult:
+    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id})
+    if not campaign_row:
+        raise HTTPException(status_code=404, detail="CSV campaign not found")
+    source_row = await db.csv_sources.find_one({"id": input.source_id})
+    if not source_row:
+        raise HTTPException(status_code=404, detail="CSV source not found")
+    await db.csv_campaigns.update_one({"id": campaign_id}, {"$set": {"edit_lock": True}})
+    try:
+        proposed, skipped = await build_edit_schedule(campaign_id, input)
+        impact = await calculate_edit_impact(campaign_id, proposed, skipped)
+        protected = await db.scheduled_emails.find({
+            "campaign_id": campaign_id,
+            "$or": [{"status": {"$in": ["sent", "failed"]}}, {"replied_at": {"$ne": None}}],
+        }).to_list(100000)
+        protected_keys = {(row["recipient_email"].lower(), row["step_key"]) for row in protected}
+        replacement = [row for row in proposed if (row.recipient_email.lower(), row.step_key) not in protected_keys]
+        if campaign_row.get("status") == "draft":
+            replacement = []
+        await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "status": "scheduled"})
+        if replacement:
+            await db.scheduled_emails.insert_many([row.model_dump() for row in replacement])
+        updates = {
+            **input.model_dump(),
+            "source_filename": source_row["filename"],
+            "total_leads": source_row["row_count"],
+            "skipped_leads": skipped,
+            "emails_scheduled": len(replacement),
+            "follow_ups_scheduled": sum(1 for row in replacement if row.step_key != input.steps[0].key),
+            "updated_at": datetime.now(timezone.utc),
+        }
+        if replacement and campaign_row.get("status") in {"stopped", "completed"}:
+            updates["status"] = "paused"
+        await db.csv_campaigns.update_one({"id": campaign_id}, {"$set": updates, "$unset": {"edit_lock": ""}})
+        updated = CsvCampaign(**{**campaign_row, **updates})
+        return CampaignEditResult(campaign=updated, impact=impact)
+    except Exception:
+        await db.csv_campaigns.update_one({"id": campaign_id}, {"$unset": {"edit_lock": ""}})
+        raise
 
 
 @router.post("/campaigns/{campaign_id}/launch", response_model=CsvCampaignLaunchResponse)
@@ -341,7 +540,7 @@ async def process_due_sends() -> None:
                 {"status": "scheduled", "scheduled_at": {"$lte": now}}
             ).sort("scheduled_at", 1).to_list(20)
             for row in rows:
-                campaign = await db.csv_campaigns.find_one({"id": row["campaign_id"], "status": "running"})
+                campaign = await db.csv_campaigns.find_one({"id": row["campaign_id"], "status": "running", "edit_lock": {"$ne": True}})
                 if not campaign:
                     continue
                 claimed = await db.scheduled_emails.find_one_and_update(

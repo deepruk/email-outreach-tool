@@ -43,6 +43,15 @@ Users can open Workspace settings, change browser-preview sending defaults, and 
 7. Pause, resume, or stop the campaign from the Campaigns dashboard.
 8. Open a campaign for lead-level timelines or download a status-enriched CSV containing campaign ID, sequence statuses, sending inboxes, and provider message IDs.
 
+## Campaign editing
+- Every CSV campaign can be opened in a safe editor, including running campaigns.
+- Editable fields: name, source CSV, flexible mappings, individual lead rows, sending inboxes, sequence columns, day offsets, start times, and timezone.
+- CSV row 1 is always parsed as headers and is never imported or counted as a lead; lead row numbering starts at CSV row 2.
+- Replacement uploads create a new immutable source snapshot. Individual lead additions, removals, and copy changes create a derived source snapshot so the campaign's source of truth remains auditable.
+- Before saving, Rohly reports added, removed, rescheduled, unchanged, protected-history, and skipped counts.
+- Saving deletes/rebuilds only `scheduled` messages. Sent, failed, and replied records are protected and suppress duplicate sequence steps.
+- Running campaigns use an edit lock while future messages are rebuilt. Edited stopped/completed campaigns with new future messages become paused for explicit resumption.
+
 Legacy template campaigns remain visible, but all new campaigns use the CSV source-of-truth wizard.
 
 ## Integration status

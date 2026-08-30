@@ -1,0 +1,94 @@
+{
+  "iteration": 5,
+  "passed": 12,
+  "failed": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [],
+  "checks": [
+    {
+      "criterion": "Every CSV campaign can be opened for editing, including running/paused/stopped/completed/draft; editor loads current config and shows header-handling notice",
+      "name": "campaign-editor-loads-edits-and-applies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Created inbox+2-lead CSV via API, created+launched campaign (status running), opened /campaigns/{id}/edit directly (no pause needed): edit-campaign-name pre-filled with current name, header-row-notice text matches /row 1/i and /never imported/i. Renamed, removed CSV row 3 (beta), added a new lead via drawer, clicked Review changes -> edit-impact-dialog showed Added/Removed/Protected history counts, clicked Apply changes -> redirected to campaign-detail-page showing updated name. GET /api/csv/campaigns confirmed status stayed 'running' and total_leads=2 after edit; test campaign stopped afterward."
+    },
+    {
+      "criterion": "CSV header rows are never imported as leads (fixture row_count excludes header)",
+      "name": "test_tscheck_csv_preview_personalization.py::test_preview_keeps_exact_per_lead_copy_and_skips_incomplete_row",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Reused existing check: POST /csv/sources with /app/tests/fixtures/personalized-leads.csv -> row_count=3 (header excluded); preview endpoint valid_count=2, skipped_count=1 with exact per-lead subject/body isolation."
+    },
+    {
+      "criterion": "Replacement CSV requires valid remapping where headers differ; impact reports added/removed leads",
+      "name": "test_tscheck_campaign_edit_replacement_and_impact.py::test_replacement_csv_requires_remapping_and_impact_reports_added_removed",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Launched campaign with lead alpha. Replaced CSV with renamed header ('Full Email'); edit-impact with stale 'Email' mapping -> 422 'Mapped recipient email column no longer exists'. Remapped to 'Full Email' -> edit-impact 200 added=1, removed=1; PUT applied same result; activity shows beta scheduled, alpha absent."
+    },
+    {
+      "criterion": "Editor supports individual lead add/edit/remove via derived immutable CSV source snapshot",
+      "name": "test_tscheck_campaign_edit_replacement_and_impact.py::test_derive_source_supports_individual_lead_add_edit_remove",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /csv/sources/{id}/derive with edited gamma subject, removed delta, added epsilon -> new source id != original, row_count=2. PUT campaign with derived source -> activity shows gamma with edited exact subject 'Hi Gamma Edited', epsilon added, delta removed. GET original source confirms original row unchanged (immutability)."
+    },
+    {
+      "criterion": "Impact review required before apply: added/removed/rescheduled/unchanged/protected/skipped counts",
+      "name": "test_tscheck_campaign_edit_replacement_and_impact.py (edit-impact endpoint assertions)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /csv/campaigns/{id}/edit-impact returns CampaignEditImpact with added/removed/rescheduled/unchanged/protected/skipped_leads fields validated in the same test file above (added=1, removed=1); also exercised in history-protection test (protected=1, rescheduled=1) before PUT apply."
+    },
+    {
+      "criterion": "Saving preserves immutable delivery history: sent/failed/replied records unchanged, no duplicate step created",
+      "name": "test_tscheck_campaign_edit_history_protection.py::test_edit_preserves_protected_history_and_rebuilds_only_future",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Launched 2-step campaign (immediate + future). Background sender marked the immediate step 'failed' (mocked inbox) confirmed via polling. Edited only the future step's day_offset/time. edit-impact showed protected=1, rescheduled=1. After PUT, activity shows exactly 1 'initial' record (same id, same subject, still status=failed) - no duplicate - and the follow-up rebuilt to the new exact time (14:30 UTC)."
+    },
+    {
+      "criterion": "Only future unsent emails are rebuilt: added leads gain records, removed leads lose future records",
+      "name": "test_tscheck_campaign_edit_replacement_and_impact.py + test_tscheck_campaign_edit_history_protection.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Covered by the added/removed lead assertions above (beta scheduled after remap, alpha absent; epsilon added, delta removed) and by the protected-history rebuild test where only the future 'follow_up_1' record was recreated with new schedule while the protected 'initial' record was left untouched."
+    },
+    {
+      "criterion": "Live editing is concurrency-safe and status-aware: draft stays draft w/ no rows, running stays running, stopped+new future work becomes paused",
+      "name": "test_tscheck_campaign_edit_status_transitions.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "3 tests: draft campaign PUT -> campaign.status stays 'draft' and activity=[] (no premature scheduled rows); running campaign PUT (day_offset change) -> status stays 'running'; stopped campaign (previously cancelled scheduled rows) PUT with future step -> status becomes 'paused' with exactly 1 new scheduled row."
+    },
+    {
+      "criterion": "Core Rohly regression: owner auth login/logout",
+      "name": "auth-login-logout-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: unauthenticated -> /login; login lands on dashboard-page; logout returns to /login."
+    },
+    {
+      "criterion": "Core Rohly regression: shell navigation, sidebar persistence, command search",
+      "name": "shell-navigation-render / sidebar-persist-and-keyboard-nav",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted checks: all nav items render their page; sidebar collapse persists on reload; Ctrl+K opens command palette hitting GET /api/product/search; 'n' shortcut navigates to /campaigns/new."
+    },
+    {
+      "criterion": "Core Rohly regression: campaigns/leads/imports/inboxes/analytics data, unified inbox, Billing status",
+      "name": "campaigns-leads-imports-inboxes-data / unified-inbox-reply-foundation / billing-catalog-and-safe-status / inbox-health-no-artificial-warmup",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran all 4 persisted checks: leads/campaigns/imports/inboxes/health/analytics pages render API-backed data; unified inbox replies endpoint responds; Billing status shows no secret/checkout disabled with correct catalog; Inbox Health page has no artificial warm-up controls."
+    },
+    {
+      "criterion": "Full backend regression suite stays green",
+      "name": "backend-pytest-suite",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q: '24 passed, 3 warnings in 83.86s' covering auth/session, billing, campaigns, campaign edit (replacement/impact, history protection, status transitions), csv lifecycle/multi-inbox/preview/sequence-timezone, dashboard, recipients, inboxes, template builder/templates, unified inbox replies."
+    }
+  ]
+}

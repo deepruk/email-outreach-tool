@@ -112,6 +112,9 @@ export interface CsvCampaignLaunchResponse {
   skipped_count: number;
 }
 
+export interface CampaignEditImpact { added: number; removed: number; rescheduled: number; unchanged: number; protected: number; skipped_leads: number; proposed_scheduled: number }
+export interface CampaignEditResult { campaign: CsvCampaign; impact: CampaignEditImpact }
+
 export interface ScheduledEmail {
   id: string;
   campaign_id: string;

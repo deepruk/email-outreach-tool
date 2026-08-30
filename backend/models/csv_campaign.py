@@ -115,3 +115,22 @@ class CsvCampaignLaunchResponse(BaseModel):
 
 class CampaignStatusRequest(BaseModel):
     status: Literal["running", "paused", "stopped"]
+
+
+class CsvSourceDeriveRequest(BaseModel):
+    rows: list[dict[str, str]] = Field(min_length=1)
+
+
+class CampaignEditImpact(BaseModel):
+    added: int
+    removed: int
+    rescheduled: int
+    unchanged: int
+    protected: int
+    skipped_leads: int
+    proposed_scheduled: int
+
+
+class CampaignEditResult(BaseModel):
+    campaign: CsvCampaign
+    impact: CampaignEditImpact
