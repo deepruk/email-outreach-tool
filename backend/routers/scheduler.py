@@ -5,6 +5,7 @@ import base64
 import os
 import random
 import secrets
+import requests
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
@@ -113,6 +114,19 @@ async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, 
     await asyncio.to_thread(send)
 
 
+async def get_google_profile(access_token: str) -> dict[str, str]:
+    def fetch() -> dict[str, str]:
+        response = requests.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    return await asyncio.to_thread(fetch)
+
+
 @oauth_router.get("/start")
 async def start_gmail_oauth() -> RedirectResponse:
     flow = make_oauth_flow(autogenerate_code_verifier=True)
@@ -146,9 +160,13 @@ async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
             f"{os.environ.get('APP_URL', 'http://localhost:3000')}/?gmail=error&reason=oauth_exchange"
         )
     credentials = flow.credentials
-    service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
-    profile = await asyncio.to_thread(lambda: service.users().getProfile(userId="me").execute())
-    email = profile["emailAddress"]
+    try:
+        profile = await get_google_profile(credentials.token)
+        email = profile["email"]
+    except Exception:
+        return RedirectResponse(
+            f"{os.environ.get('APP_URL', 'http://localhost:3000')}/?gmail=error&reason=profile_lookup"
+        )
     inbox = await db.inboxes.find_one({"email": email})
     if inbox:
         inbox_id = inbox["id"]
