@@ -1,0 +1,107 @@
+{
+  "theme": "light",
+  "archetype": "Swiss & High-Contrast (Archetype 4) - Authority, Clarity, Truth",
+  "typography": {
+    "headings": {
+      "family": "Outfit",
+      "installation": "Add to index.html: <link href=\"https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+      "usage": "Use 'font-outfit' for all H1-H4. text-3xl to text-4xl max for page titles. MUST use tracking-tight."
+    },
+    "body": {
+      "family": "Geist Variable",
+      "installation": "Already available in index.css via --font-sans",
+      "usage": "Use for all data tables, inputs, labels, and generic text. Small, dense, highly legible (text-sm is default for data)."
+    },
+    "hierarchy": {
+      "H1": "text-3xl font-semibold tracking-tight",
+      "H2": "text-xl font-medium tracking-tight",
+      "H3": "text-lg font-medium",
+      "Body": "text-sm leading-relaxed",
+      "Labels": "text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground"
+    }
+  },
+  "colors": {
+    "strategy": "Operations-focused, monochrome structural base with highly visible signal colors for status. No gradients. No marketing fluff.",
+    "background": "bg-zinc-50 or bg-[#F4F4F5] (Soft off-white for depth)",
+    "surface": "bg-white (Pure white for all cards, tables, and command panels)",
+    "primary": "bg-zinc-900 text-white (Authoritative, serious actions)",
+    "borders": "border-zinc-200 (1px solid everywhere, never thicker)",
+    "status": {
+      "success": "text-emerald-600 bg-emerald-50 (Sending, Connected, Active)",
+      "warning": "text-amber-600 bg-amber-50 (Queued, Waiting for Gap, Paused)",
+      "destructive": "text-red-600 bg-red-50 (Failed, Disconnected Inbox, Error)"
+    }
+  },
+  "visual_enhancers": {
+    "borders_and_shadows": "Rely on 1px borders (border-collapse on grids) rather than heavy shadows. Use shadow-sm ONLY on dropdowns, modals, and floating action bars.",
+    "radius": "Subtle roundness. Use rounded-md (6px or 8px max). Do not use pill-shaped containers for data widgets.",
+    "glassmorphism": "Not recommended for operations dashboard to avoid refraction of data. Use solid white backgrounds with strict borders instead."
+  },
+  "grids_and_layouts": {
+    "mode": "High Density Grid (Mode B)",
+    "spacing": "Dense. p-4 or p-6 for widget internals. gap-4 or gap-6 for grids.",
+    "page_structure": "Left Sidebar (collapsible for vertical scaling) + Top Header (Date range, Global Filters, Export) + Main Content Area.",
+    "dashboard_zones": {
+      "top_third": "3-4 primary KPI cards (Sent today, In Queue, Error Rate, Active Inboxes).",
+      "middle_third": "Active Campaigns list vs Server Health / Sending Velocity chart.",
+      "bottom_third": "Live Activity Feed (Real-time logs of 'Sent to X' or 'Waiting 14m for next send')."
+    }
+  },
+  "components": {
+    "navigation": {
+      "type": "Sidebar",
+      "instructions_to_main_agent": "Use Shadcn Sidebar or standard left-nav. Sections: Dashboard, Inboxes (OAuth), Campaigns, Templates, History. Sticky header with breadcrumbs and workspace switcher."
+    },
+    "tables": {
+      "type": "Data Tables",
+      "instructions_to_main_agent": "Use Shadcn Table. Dense padding (py-2 px-3). Include inline row actions on hover. Status columns MUST use badge dots (e.g., small colored circle + text)."
+    },
+    "scheduler_widget": {
+      "type": "Custom Form Inputs",
+      "instructions_to_main_agent": "For the 'random gap' feature: Use two distinct input fields for 'Min Gap (mins)' and 'Max Gap (mins)' side-by-side, joined by a dash. Add a subtle helper text: 'System will randomize delay between these values to ensure compliance.'"
+    },
+    "forms": {
+      "type": "Shadcn Forms",
+      "instructions_to_main_agent": "Use React Hook Form + Zod + Shadcn Form primitives. Keep inputs standard, clear borders. No native HTML <input>."
+    },
+    "toasts": {
+      "type": "Sonner",
+      "instructions_to_main_agent": "Use Sonner for all success/failure notifications. Position bottom-right."
+    }
+  },
+  "motion": {
+    "strategy": "Minimalist and functional. No bouncy animations.",
+    "interactions": "Hover states on table rows (bg-zinc-50/50). Focus states must have higher contrast (ring-2 ring-zinc-900).",
+    "loaders": "Skeleton loaders for data tables. Real-time pulse indicator (animate-pulse) on the 'Active Sending' status dot."
+  },
+  "accessibility": {
+    "contrast": "Ensure all text meets 4.5:1 ratio. Text inside status badges must be readable.",
+    "testing_attributes": "All interactive elements (buttons, inputs, tabs, row actions) MUST include a data-testid attribute in kebab-case format.",
+    "focus": "Visible focus rings on all inputs and buttons."
+  },
+  "media": {
+    "icons": {
+      "library": "@phosphor-icons/react",
+      "installation": "yarn add @phosphor-icons/react",
+      "usage": "Use Phosphor icons with weight='regular' or 'bold' for dense data apps. They look more professional than default icons."
+    },
+    "empty_states": "Use simple abstract geometric shapes or Phosphor icons, not childish illustrations."
+  },
+  "image_urls": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1658604663578-04634f4cb897?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBhYnN0cmFjdCUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzg4MTE5MDc3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Clean, soft white circular abstract background. Use for Auth/Login page background.",
+      "category": "backgrounds"
+    }
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You are building a high-trust Operations Dashboard, not a consumer app. Prioritize data density, clarity, and precision.",
+    "Never use completely transparent backgrounds in headers or overlays. Use bg-white with a bottom border.",
+    "Do not use transition: all. Target specific properties (e.g., transition-colors).",
+    "All interactive elements MUST include a data-testid attribute (e.g., data-testid='connect-inbox-button').",
+    "Use standard HTML layouts with Tailwind (grid, flex), but ALWAYS use Shadcn for complex interactives (Dropdowns, Dialogs, Selects, Tables).",
+    "Do not use generic 'AI slop' aesthetics. Avoid gratuitous gradients and soft muddy shadows. Stick to crisp 1px borders and neutral tones with stark signal colors.",
+    "Inboxes connection UI must feel secure: use lock icons, green 'connected' indicators, and clear 'OAuth Google' buttons.",
+    "For the gap/delay visualization, show a mini timeline or queue list highlighting the 'Next send in X mins' to build trust that the system is respecting the limits."
+  ]
+}
