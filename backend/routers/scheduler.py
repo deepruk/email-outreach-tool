@@ -67,6 +67,16 @@ def redirect_uri() -> str:
     )
 
 
+def make_oauth_flow(*, autogenerate_code_verifier: bool, code_verifier: str | None = None) -> Flow:
+    return Flow.from_client_config(
+        oauth_config(),
+        scopes=GMAIL_SCOPES,
+        redirect_uri=redirect_uri(),
+        autogenerate_code_verifier=autogenerate_code_verifier,
+        code_verifier=code_verifier,
+    )
+
+
 async def get_gmail_credentials(inbox_id: str) -> Credentials:
     token = await db.oauth_tokens.find_one({"inbox_id": inbox_id})
     if not token:
@@ -105,13 +115,15 @@ async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, 
 
 @oauth_router.get("/start")
 async def start_gmail_oauth() -> RedirectResponse:
-    flow = Flow.from_client_config(oauth_config(), scopes=GMAIL_SCOPES, redirect_uri=redirect_uri())
+    flow = make_oauth_flow(autogenerate_code_verifier=True)
     authorization_url, state = flow.authorization_url(
         access_type="offline",
         prompt="consent",
         include_granted_scopes="true",
     )
-    await db.oauth_states.insert_one({"state": state, "created_at": utc_now()})
+    await db.oauth_states.insert_one(
+        {"state": state, "code_verifier": flow.code_verifier, "created_at": utc_now()}
+    )
     return RedirectResponse(authorization_url)
 
 
@@ -123,8 +135,16 @@ async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
     created_at = normalise_datetime(oauth_state.get("created_at")) or utc_now()
     if (utc_now() - created_at).total_seconds() > 600:
         raise HTTPException(status_code=400, detail="OAuth state expired")
-    flow = Flow.from_client_config(oauth_config(), scopes=GMAIL_SCOPES, redirect_uri=redirect_uri())
-    flow.fetch_token(code=code)
+    code_verifier = oauth_state.get("code_verifier")
+    if not code_verifier:
+        raise HTTPException(status_code=400, detail="OAuth verifier missing; please start the connection again")
+    flow = make_oauth_flow(autogenerate_code_verifier=False, code_verifier=code_verifier)
+    try:
+        flow.fetch_token(code=code)
+    except Exception:
+        return RedirectResponse(
+            f"{os.environ.get('APP_URL', 'http://localhost:3000')}/?gmail=error&reason=oauth_exchange"
+        )
     credentials = flow.credentials
     service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
     profile = await asyncio.to_thread(lambda: service.users().getProfile(userId="me").execute())
