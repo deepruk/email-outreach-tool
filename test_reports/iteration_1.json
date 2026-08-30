@@ -1,0 +1,94 @@
+{
+  "iteration": 1,
+  "passed": 12,
+  "failed": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [],
+  "checks": [
+    {
+      "criterion": "CSV campaign setup accepts a CSV upload and allows flexible mapping of recipient, identity, initial subject/body, and follow-up subject/body columns",
+      "name": "csv-wizard-column-mapping",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Uploaded /app/tests/fixtures/personalized-leads.csv, mapping-step auto-mapped Email/First Name/Company + all 3 sequence subject/body columns, then map-company-column and map-initial-subject selects were changed to a different column and reverted, proving no fixed column names are assumed."
+    },
+    {
+      "criterion": "The CSV is the source of truth and each lead's copy remains independent",
+      "name": "csv-wizard-preview-per-lead-and-skip",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Preview step showed John's card with exact subject 'Quick idea for ABC security' and body containing 'This exact message belongs only to John.', Sarah's card with distinct subject 'Security compliance at XYZ' and her own body text; asserted John's subject != Sarah's subject and no cross-row text bleed."
+    },
+    {
+      "criterion": "Incomplete personalized rows are not sent",
+      "name": "csv-wizard-preview-per-lead-and-skip",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Same preview run: summary card showed valid_count=2, and the Missing/Incomplete lead card (missing.csv-test@example.com) displayed a 'Skipped: Missing ...' badge because First Subject was empty."
+    },
+    {
+      "criterion": "The CSV is the source of truth / incomplete rows skipped (API layer)",
+      "name": "test_tscheck_csv_preview_personalization.py::test_preview_keeps_exact_per_lead_copy_and_skips_incomplete_row",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/csv/campaigns/preview with the fixture CSV returned valid_count=2, skipped_count=1; John/Sarah step subjects and bodies matched their own CSV rows exactly and differed from each other; missing lead's error mentioned 'subject'."
+    },
+    {
+      "criterion": "Campaigns support multiple connected inboxes, per-inbox daily limits, and controlled spacing",
+      "name": "csv-wizard-multi-inbox-selection",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Inbox-selection step listed both real connected Gmail inboxes (deepanshu@rohence.com, deepanshu@tryrohence.com) each showing 'NN / day', both were checked simultaneously, and selection persisted through Next/Back navigation."
+    },
+    {
+      "criterion": "Campaigns support multiple connected inboxes, per-inbox daily limits, and controlled spacing (spacing/distribution)",
+      "name": "test_tscheck_csv_multi_inbox_spacing.py::test_launch_distributes_leads_across_inboxes_with_spaced_repeat_sends",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/csv/campaigns then /launch (day_offset=1, future) with 4 leads across 2 inboxes: activity split 2/2 across both inbox ids, and consecutive scheduled_at times for the same inbox+step were 10-20 minutes apart (verified via GET /api/csv/campaigns/{id}/activity)."
+    },
+    {
+      "criterion": "Sequence days, exact start times, and timezone are configurable",
+      "name": "csv-wizard-sequence-timing",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Changed timezone to America/New_York, day offsets to 2/5/9 and send times to 08:15/13:30/16:45 for Initial/Follow-up 1/Follow-up 2; values carried into the preview step and remained set after navigating back."
+    },
+    {
+      "criterion": "Sequence days, exact start times, and timezone are configurable (scheduling accuracy)",
+      "name": "test_tscheck_csv_sequence_timezone.py::test_launch_schedules_using_configured_day_time_and_timezone",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Campaign with day_offset=3, send_time=15:45, timezone=America/New_York launched; GET activity's scheduled_at converted to America/New_York matched the expected date/hour/minute exactly."
+    },
+    {
+      "criterion": "Campaign dashboard supports operation and lead-level auditing",
+      "name": "csv-dashboard-campaign-audit",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "New CSV campaign row showed total leads (2) and 'running' status; pause->paused, resume->running, and stop->stopped controls all updated the status badge; opening the row showed the lead activity drawer with per-lead timeline and a download-campaign-status-link pointing to /api/csv/campaigns/{id}/export."
+    },
+    {
+      "criterion": "Campaign dashboard supports operation and lead-level auditing (metrics/export API)",
+      "name": "test_tscheck_csv_dashboard_lifecycle.py::test_dashboard_metrics_pause_resume_stop_and_export",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/csv/campaigns listing showed total_leads=1, emails_scheduled=1, sent/failed/skipped=0; PATCH status paused/running/stopped worked; stop cancelled the scheduled activity row; GET /export returned text/csv containing the campaign id and 'Mailflow Status' column."
+    },
+    {
+      "criterion": "Inbox/template/recipient deletion and workspace settings are usable",
+      "name": "workspace-settings-and-deletion-safety",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Settings view saved sending defaults; created inbox edited via display name/signature/daily limit (33/day) then deleted after confirmation; unused template and recipient deleted after confirmation; a freshly-created inbox referenced by a legacy campaign showed the blocking error 'Inbox is used by an existing campaign' instead of deleting."
+    },
+    {
+      "criterion": "Deepanshu naming and navigation are updated",
+      "name": "core-navigation-naming",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Dashboard title read 'Good morning, Deepanshu', avatar showed 'DS', and nav buttons Dashboard/Campaigns/Leads/Inboxes/CSV imports/Legacy templates/Activity plus Workspace settings were all visible and clickable."
+    }
+  ]
+}

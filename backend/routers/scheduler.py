@@ -7,7 +7,7 @@ import random
 import secrets
 import requests
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2.credentials import Credentials
@@ -22,6 +22,7 @@ from models.scheduler import (
     HistoryEntry,
     Inbox,
     InboxConnectRequest,
+    InboxUpdate,
     LaunchResponse,
     Overview,
     Recipient,
@@ -100,18 +101,19 @@ async def get_gmail_credentials(inbox_id: str) -> Credentials:
     return credentials
 
 
-async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, body: str) -> None:
+async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, body: str) -> str | None:
     credentials = await get_gmail_credentials(inbox_id)
 
-    def send() -> None:
+    def send() -> str | None:
         message = MIMEText(body, "plain", "utf-8")
         message["to"] = recipient_email
         message["subject"] = subject
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
         service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
-        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        result = service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        return result.get("id")
 
-    await asyncio.to_thread(send)
+    return await asyncio.to_thread(send)
 
 
 async def get_google_profile(access_token: str) -> dict[str, str]:
@@ -246,7 +248,12 @@ async def connect_inbox(input: InboxConnectRequest) -> Inbox:
     existing = await db.inboxes.find_one({"email": input.email})
     if existing:
         return Inbox(**existing)
-    inbox = Inbox(email=input.email, display_name=input.display_name or input.email.split("@")[0])
+    inbox = Inbox(
+        email=input.email,
+        display_name=input.display_name or input.email.split("@")[0],
+        signature=input.signature,
+        daily_sending_limit=input.daily_sending_limit,
+    )
     await db.inboxes.insert_one(inbox.model_dump())
     await db.activities.insert_one(
         Activity(
@@ -256,6 +263,29 @@ async def connect_inbox(input: InboxConnectRequest) -> Inbox:
         ).model_dump()
     )
     return inbox
+
+
+@router.delete("/inboxes/{inbox_id}", status_code=204)
+async def delete_inbox(inbox_id: str) -> Response:
+    inbox = await db.inboxes.find_one({"id": inbox_id})
+    if not inbox:
+        raise HTTPException(status_code=404, detail="Inbox not found")
+    usage = await db.campaigns.count_documents({"inbox_id": inbox_id})
+    if usage:
+        raise HTTPException(status_code=409, detail="Inbox is used by an existing campaign")
+    await db.oauth_tokens.delete_one({"inbox_id": inbox_id})
+    await db.inboxes.delete_one({"id": inbox_id})
+    return Response(status_code=204)
+
+
+@router.patch("/inboxes/{inbox_id}", response_model=Inbox)
+async def update_inbox(inbox_id: str, input: InboxUpdate) -> Inbox:
+    inbox = await db.inboxes.find_one({"id": inbox_id})
+    if not inbox:
+        raise HTTPException(status_code=404, detail="Inbox not found")
+    updates = input.model_dump()
+    await db.inboxes.update_one({"id": inbox_id}, {"$set": updates})
+    return Inbox(**{**inbox, **updates})
 
 
 @router.get("/recipients", response_model=list[Recipient])
@@ -271,6 +301,18 @@ async def create_recipient(input: RecipientCreate) -> Recipient:
     return recipient
 
 
+@router.delete("/recipients/{recipient_id}", status_code=204)
+async def delete_recipient(recipient_id: str) -> Response:
+    recipient = await db.recipients.find_one({"id": recipient_id})
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    usage = await db.campaigns.count_documents({"recipient_ids": recipient_id})
+    if usage:
+        raise HTTPException(status_code=409, detail="Recipient is used by an existing campaign")
+    await db.recipients.delete_one({"id": recipient_id})
+    return Response(status_code=204)
+
+
 @router.get("/templates", response_model=list[Template])
 async def list_templates() -> list[Template]:
     rows = await db.templates.find().sort("created_at", -1).to_list(1000)
@@ -282,6 +324,18 @@ async def create_template(input: TemplateCreate) -> Template:
     template = Template(**input.model_dump())
     await db.templates.insert_one(template.model_dump())
     return template
+
+
+@router.delete("/templates/{template_id}", status_code=204)
+async def delete_template(template_id: str) -> Response:
+    template = await db.templates.find_one({"id": template_id})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    usage = await db.campaigns.count_documents({"template_id": template_id})
+    if usage:
+        raise HTTPException(status_code=409, detail="Template is used by an existing campaign")
+    await db.templates.delete_one({"id": template_id})
+    return Response(status_code=204)
 
 
 @router.get("/campaigns", response_model=list[Campaign])
@@ -310,6 +364,17 @@ async def create_campaign(input: CampaignCreate) -> Campaign:
     )
     await db.campaigns.insert_one(campaign.model_dump())
     return campaign
+
+
+@router.delete("/campaigns/{campaign_id}", status_code=204)
+async def delete_campaign(campaign_id: str) -> Response:
+    campaign = await db.campaigns.find_one({"id": campaign_id})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if campaign.get("status") == "active":
+        raise HTTPException(status_code=409, detail="Pause the campaign before deleting it")
+    await db.campaigns.delete_one({"id": campaign_id})
+    return Response(status_code=204)
 
 
 @router.post("/campaigns/{campaign_id}/launch", response_model=LaunchResponse)

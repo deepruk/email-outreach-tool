@@ -18,11 +18,22 @@ class Inbox(BaseModel):
     connected_at: datetime = Field(default_factory=datetime.utcnow)
     last_used_at: datetime | None = None
     is_mocked: bool = True
+    signature: str = ""
+    daily_sending_limit: int = Field(default=50, ge=1, le=2000)
 
 
 class InboxConnectRequest(BaseModel):
     email: str
     display_name: str = ""
+    signature: str = ""
+    daily_sending_limit: int = Field(default=50, ge=1, le=2000)
+
+
+class InboxUpdate(BaseModel):
+    display_name: str
+    signature: str = ""
+    daily_sending_limit: int = Field(default=50, ge=1, le=2000)
+    status: Literal["connected", "paused", "error"] = "connected"
 
 
 class Recipient(BaseModel):

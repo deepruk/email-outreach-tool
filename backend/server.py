@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from typing import List
 import uuid
 from datetime import datetime
 from routers.scheduler import oauth_router, router as scheduler_router
+from routers.csv_campaigns import process_due_sends, router as csv_campaigns_router
 
 
 ROOT_DIR = Path(__file__).parent
@@ -22,7 +24,9 @@ from lib.db import client, db
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    sender_task = asyncio.create_task(process_due_sends())
     yield
+    sender_task.cancel()
     client.close()
 
 
@@ -77,6 +81,7 @@ logger = logging.getLogger(__name__)
 # Resource routers are folded into the /api router before it is mounted.
 api_router.include_router(scheduler_router)
 api_router.include_router(oauth_router)
+api_router.include_router(csv_campaigns_router)
 
 # Include the router in the main app last so every endpoint is served under /api.
 app.include_router(api_router)

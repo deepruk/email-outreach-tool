@@ -8,7 +8,7 @@ from models.scheduler import Activity, Campaign, HistoryEntry, Inbox, Recipient,
 async def seed() -> None:
     if await db.inboxes.count_documents({}) == 0:
         inboxes = [
-            Inbox(email="maya@northstar-studio.com", display_name="Maya Chen"),
+            Inbox(email="deepanshu@northstar-studio.com", display_name="Deepanshu"),
             Inbox(email="hello@northstar-studio.com", display_name="Northstar Studio"),
         ]
         await db.inboxes.insert_many([item.model_dump() for item in inboxes])
@@ -35,12 +35,12 @@ async def seed() -> None:
             Template(
                 name="Warm introduction",
                 subject="A quick idea for {{company}}",
-                body="Hi {{first_name}},\n\nI wanted to share a short idea that may be useful for {{company}}. Would a 15-minute conversation next week be worthwhile?\n\nBest,\nMaya",
+                body="Hi {{first_name}},\n\nI wanted to share a short idea that may be useful for {{company}}. Would a 15-minute conversation next week be worthwhile?\n\nBest,\nDeepanshu",
             ),
             Template(
                 name="Helpful follow-up",
                 subject="Following up on my note",
-                body="Hi {{first_name}},\n\nJust following up in case my previous note got buried. Happy to send more context if useful.\n\nBest,\nMaya",
+                body="Hi {{first_name}},\n\nJust following up in case my previous note got buried. Happy to send more context if useful.\n\nBest,\nDeepanshu",
             ),
         ]
         await db.templates.insert_many([item.model_dump() for item in templates])
@@ -75,8 +75,8 @@ async def seed() -> None:
             )
         activities = [
             Activity(message="Waiting for next send", detail="14 min remaining · Q2 partnership outreach", tone="warning"),
-            Activity(message="Email sent", detail="ari@brightline.co via maya@northstar-studio.com", tone="success"),
-            Activity(message="Email sent", detail="jordan@framework.io via maya@northstar-studio.com", tone="success"),
+            Activity(message="Email sent", detail="ari@brightline.co via deepanshu@northstar-studio.com", tone="success"),
+            Activity(message="Email sent", detail="jordan@framework.io via deepanshu@northstar-studio.com", tone="success"),
             Activity(message="Campaign launched", detail="Q2 partnership outreach · 8 recipients", tone="neutral"),
         ]
         await db.activities.insert_many([item.model_dump() for item in activities])
