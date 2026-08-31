@@ -8,6 +8,7 @@ import {
   Check,
   Clock3,
   FileSpreadsheet,
+  FlaskConical,
   Inbox as InboxIcon,
   Mail,
   ShieldCheck,
@@ -26,6 +27,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
+import { TestEmailDialog } from "@/components/rohly/TestEmailDialog";
 
 const wizardSteps = ["Upload CSV", "Map columns", "Select inboxes", "Configure sequence", "Preview", "Launch"];
 
@@ -66,6 +68,7 @@ export default function CsvCampaignWizard() {
   const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [preview, setPreview] = useState<CsvCampaignPreview | null>(null);
   const [createdCampaign, setCreatedCampaign] = useState<CsvCampaign | null>(null);
+  const [testOpen, setTestOpen] = useState(false);
 
   const inboxesQuery = useQuery({ queryKey: ["inboxes"], queryFn: () => apiGet<Inbox[]>("/workspace/inboxes") });
   const inboxes = inboxesQuery.data ?? [];
@@ -148,5 +151,5 @@ export default function CsvCampaignWizard() {
         {step === 5 ? <div className="border border-zinc-200 bg-white p-6" data-testid="launch-step"><div className="flex size-12 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><Check size={20} /></div><h2 className="mt-5 font-heading text-2xl font-semibold">Ready to schedule</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-500">{preview?.valid_count ?? 0} leads will be scheduled across {selectedInboxes.length} inbox{selectedInboxes.length === 1 ? "" : "es"}. Each subject and body remains byte-for-byte equivalent to the parsed CSV value. Incomplete rows are skipped.</p><div className="mt-6 grid gap-3 sm:grid-cols-3"><div className="border border-zinc-200 p-3"><p className="text-[10px] uppercase tracking-[0.1em] text-zinc-400">Emails</p><p className="mt-2 text-lg font-semibold">{(preview?.valid_count ?? 0) * sequence.length}</p></div><div className="border border-zinc-200 p-3"><p className="text-[10px] uppercase tracking-[0.1em] text-zinc-400">Sequence steps</p><p className="mt-2 text-lg font-semibold">{sequence.length}</p></div><div className="border border-zinc-200 p-3"><p className="text-[10px] uppercase tracking-[0.1em] text-zinc-400">Skipped leads</p><p className="mt-2 text-lg font-semibold">{preview?.skipped_count ?? 0}</p></div></div><Button onClick={() => createdCampaign && launchMutation.mutate(createdCampaign.id)} disabled={!createdCampaign || launchMutation.isPending} className="mt-7 gap-2 rounded-md bg-zinc-950 px-5 hover:bg-zinc-800" data-testid="launch-csv-campaign-button"><Mail size={15} /> {launchMutation.isPending ? "Scheduling…" : "Launch campaign"}</Button></div> : null}
 
         {step > 0 && step < 5 ? <div className="mt-6 flex w-full flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-5" data-testid="wizard-footer"><Button type="button" variant="ghost" onClick={() => setStep((current) => Math.max(0, current - 1))} className="gap-2 rounded-md" data-testid="wizard-back-button"><ArrowLeft size={14} /> Back</Button><Button type="button" onClick={goNext} disabled={previewMutation.isPending || createMutation.isPending || (step === 2 && selectedInboxes.length === 0)} className="ml-auto gap-2 rounded-md bg-zinc-950 px-5 hover:bg-zinc-800" data-testid="wizard-next-button">{step === 4 ? "Create campaign" : step === 3 ? "Build preview" : "Continue"} <ArrowRight size={14} /></Button></div> : null}
-      </section></div></main><Toaster position="bottom-right" richColors /></div>;
+      </section></div></main>{step === 5 && createdCampaign ? <div className="fixed bottom-5 right-5 z-30"><Button onClick={() => setTestOpen(true)} variant="outline" className="gap-2 border-blue-200 bg-white text-blue-700 shadow-lg hover:bg-blue-50" data-testid="launch-review-test-email-button"><FlaskConical size={14} /> Send test before launch</Button></div> : null}{testOpen && createdCampaign ? <TestEmailDialog campaignId={createdCampaign.id} inboxCount={createdCampaign.inbox_ids.length} onClose={() => setTestOpen(false)} /> : null}<Toaster position="bottom-right" richColors /></div>;
 }

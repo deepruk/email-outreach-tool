@@ -52,6 +52,13 @@ Users can open Workspace settings, change browser-preview sending defaults, and 
 - Saving deletes/rebuilds only `scheduled` messages. Sent, failed, and replied records are protected and suppress duplicate sequence steps.
 - Running campaigns use an edit lock while future messages are rebuilt. Edited stopped/completed campaigns with new future messages become paused for explicit resumption.
 
+## Campaign test emails
+- Campaign detail and the final Launch review expose `Send test` without activating the campaign.
+- The operator enters a custom test recipient, subject, and body each time.
+- Rohly sends one independent test through every inbox currently selected by the campaign and returns per-inbox Gmail success/failure results.
+- Test sends do not create scheduled-email/history records, do not change lead or campaign metrics/status, and do not increment Rohly daily-limit counters.
+- MOCKED, paused, disconnected, or missing inboxes return an explicit per-inbox failure instead of a simulated success.
+
 Legacy template campaigns remain visible, but all new campaigns use the CSV source-of-truth wizard.
 
 ## Integration status

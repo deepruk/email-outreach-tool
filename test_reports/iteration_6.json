@@ -1,0 +1,80 @@
+{
+  "iteration": 6,
+  "passed": 10,
+  "failed": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [],
+  "checks": [
+    {
+      "criterion": "Campaign test email succeeds from every selected real Gmail inbox (dfd0f152, deepanshu@tryrohence.com + deepanshu@rohence.com, custom test to deepanshu@rohence.com, sent_count=2/failed_count=0, message ids, no offset-naive/aware or invalid_scope error)",
+      "name": "test_tscheck_campaign_test_send_real_gmail.py::test_real_gmail_test_send_succeeds_from_both_inboxes_and_preserves_campaign_state",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /csv/campaigns/dfd0f152-dc20-433b-b40d-e14961cc1c73/test-send with recipient_email=deepanshu@rohence.com -> 200, sent_count=2, failed_count=0, both results success=true with non-empty Gmail message_id, no error text; response body contained none of 'offset-naive'/'offset-aware'/'invalid_scope'."
+    },
+    {
+      "criterion": "Test-send validation: invalid recipient returns 422",
+      "name": "test_tscheck_campaign_test_send_real_gmail.py::test_invalid_recipient_returns_422",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST .../test-send with recipient_email='not-an-email' -> 422."
+    },
+    {
+      "criterion": "Test sends remain isolated from campaign state (status, emails_sent, emails_scheduled, follow_ups_scheduled, failed_emails, skipped_leads, replies, positive_replies, scheduled-email activity count unchanged before vs after)",
+      "name": "test_tscheck_campaign_test_send_real_gmail.py (same test, before/after comparison)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Fetched campaign dfd0f152 and its activity before the real test-send, re-fetched after: all 8 metric fields identical and scheduled-activity count identical after the successful 2-inbox send."
+    },
+    {
+      "criterion": "Mocked/paused inboxes produce explicit per-inbox failures, not simulated success",
+      "name": "test_tscheck_campaign_test_send_validation.py::test_mocked_and_disconnected_inboxes_produce_explicit_failures_not_simulated_success",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Own tscheck campaign with 1 mocked inbox + 1 paused-after-creation inbox: test-send -> sent_count=0, failed_count=2, both results success=false with non-empty human-readable error and no fabricated message_id."
+    },
+    {
+      "criterion": "Missing/deleted inbox produces explicit failure",
+      "name": "test_tscheck_campaign_test_send_validation.py::test_missing_inbox_id_produces_explicit_failure",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Deleted the inbox referenced by a fresh tscheck campaign, then test-send -> failed_count=1, result.error contains 'no longer exists'."
+    },
+    {
+      "criterion": "Test-email UI available in campaign detail header, opens dialog without changing campaign",
+      "name": "campaign-detail-test-email-dialog",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Logged in, opened /campaigns/dfd0f152-dc20-433b-b40d-e14961cc1c73, clicked open-test-email-button -> test-email-dialog/test-email-form visible, filled recipient/subject/body, closed without submitting; open-test-email-button still visible afterward (no navigation/activation side effect)."
+    },
+    {
+      "criterion": "Test-email UI available at final Launch review of a created draft ('Send test before launch'), opens same dialog without activating the campaign",
+      "name": "launch-review-test-email-dialog",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Built a fresh tscheck CSV campaign through the wizard (mocked/preview inbox only) to the launch-step, clicked launch-review-test-email-button -> test-email-dialog/test-email-form visible, closed it, and confirmed launch-step + launch-csv-campaign-button still shown (campaign not launched)."
+    },
+    {
+      "criterion": "Core Rohly regression: owner auth login/logout",
+      "name": "auth-login-logout-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: unauthenticated -> /login; login lands on dashboard-page; logout returns to /login."
+    },
+    {
+      "criterion": "Core Rohly regression: campaigns/leads/imports/inboxes/analytics data, Billing status",
+      "name": "campaigns-leads-imports-inboxes-data / billing-catalog-and-safe-status / shell-navigation-render",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran all 3 persisted checks: campaigns/leads/imports/inboxes/health/analytics pages render API-backed data; Billing status shows correct catalog with no secret/checkout disabled; shell navigation renders every nav target and the help panel."
+    },
+    {
+      "criterion": "Full backend regression suite stays green",
+      "name": "backend-pytest-suite",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q: '28 passed, 3 warnings' - all prior 24 tests plus the 4 new test-send tests."
+    }
+  ]
+}

@@ -22,6 +22,9 @@ from models.csv_campaign import (
     CsvSourceDeriveRequest,
     CsvSourceSummary,
     ScheduledEmail,
+    TestEmailInboxResult,
+    TestEmailRequest,
+    TestEmailResponse,
 )
 from models.scheduler import Inbox
 from routers.scheduler import send_gmail_message
@@ -315,6 +318,59 @@ async def preview_edit_impact(campaign_id: str, input: CsvCampaignCreate) -> Cam
         raise HTTPException(status_code=404, detail="CSV campaign not found")
     proposed, skipped = await build_edit_schedule(campaign_id, input)
     return await calculate_edit_impact(campaign_id, proposed, skipped)
+
+
+@router.post("/campaigns/{campaign_id}/test-send", response_model=TestEmailResponse)
+async def send_campaign_test(campaign_id: str, input: TestEmailRequest) -> TestEmailResponse:
+    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id})
+    if not campaign_row:
+        raise HTTPException(status_code=404, detail="CSV campaign not found")
+    recipient = input.recipient_email.strip()
+    if "@" not in recipient or recipient.startswith("@") or recipient.endswith("@"):
+        raise HTTPException(status_code=422, detail="Enter a valid test recipient email")
+    inbox_rows = await db.inboxes.find({"id": {"$in": campaign_row.get("inbox_ids", [])}}).to_list(100)
+    inbox_lookup = {row["id"]: row for row in inbox_rows}
+    results: list[TestEmailInboxResult] = []
+    for inbox_id in campaign_row.get("inbox_ids", []):
+        inbox = inbox_lookup.get(inbox_id)
+        if not inbox:
+            results.append(TestEmailInboxResult(
+                inbox_id=inbox_id,
+                inbox_email="Unavailable inbox",
+                success=False,
+                error="Inbox no longer exists",
+            ))
+            continue
+        if inbox.get("status") != "connected" or inbox.get("is_mocked", True):
+            results.append(TestEmailInboxResult(
+                inbox_id=inbox_id,
+                inbox_email=inbox["email"],
+                success=False,
+                error="Reconnect this inbox through Gmail before sending a test",
+            ))
+            continue
+        try:
+            send_result = await send_gmail_message(inbox_id, recipient, input.subject, input.body)
+            results.append(TestEmailInboxResult(
+                inbox_id=inbox_id,
+                inbox_email=inbox["email"],
+                success=True,
+                message_id=send_result.get("message_id"),
+            ))
+        except Exception as exc:
+            results.append(TestEmailInboxResult(
+                inbox_id=inbox_id,
+                inbox_email=inbox["email"],
+                success=False,
+                error=str(exc)[:240],
+            ))
+    return TestEmailResponse(
+        campaign_id=campaign_id,
+        recipient_email=recipient,
+        sent_count=sum(1 for result in results if result.success),
+        failed_count=sum(1 for result in results if not result.success),
+        results=results,
+    )
 
 
 @router.put("/campaigns/{campaign_id}", response_model=CampaignEditResult)

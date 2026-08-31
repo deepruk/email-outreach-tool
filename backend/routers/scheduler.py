@@ -41,6 +41,7 @@ GMAIL_SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
+GMAIL_SEND_SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 
 def utc_now() -> datetime:
@@ -51,6 +52,15 @@ def normalise_datetime(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def google_token_expiry(value: datetime | None) -> datetime | None:
+    """google-auth compares expiry against its own naive UTC clock."""
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 
 def oauth_config() -> dict[str, dict[str, str]]:
@@ -81,7 +91,7 @@ def make_oauth_flow(*, autogenerate_code_verifier: bool, code_verifier: str | No
     )
 
 
-async def get_gmail_credentials(inbox_id: str) -> Credentials:
+async def get_gmail_credentials(inbox_id: str, required_scopes: list[str] | None = None) -> Credentials:
     token = await db.oauth_tokens.find_one({"inbox_id": inbox_id})
     if not token:
         raise HTTPException(status_code=401, detail="Gmail inbox needs to be connected again")
@@ -91,11 +101,10 @@ async def get_gmail_credentials(inbox_id: str) -> Credentials:
         token_uri="https://oauth2.googleapis.com/token",
         client_id=os.environ["GOOGLE_CLIENT_ID"],
         client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
-        scopes=GMAIL_SCOPES,
-        expiry=normalise_datetime(token.get("expires_at")),
+        scopes=required_scopes or GMAIL_SCOPES,
+        expiry=google_token_expiry(token.get("expires_at")),
     )
-    expiry = normalise_datetime(token.get("expires_at"))
-    if expiry and credentials.expired:
+    if credentials.expiry and credentials.expired:
         credentials.refresh(GoogleRequest())
         await db.oauth_tokens.update_one(
             {"inbox_id": inbox_id},
@@ -105,7 +114,7 @@ async def get_gmail_credentials(inbox_id: str) -> Credentials:
 
 
 async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, body: str) -> dict[str, str | None]:
-    credentials = await get_gmail_credentials(inbox_id)
+    credentials = await get_gmail_credentials(inbox_id, GMAIL_SEND_SCOPES)
 
     def send() -> dict[str, str | None]:
         message = MIMEText(body, "plain", "utf-8")
@@ -191,6 +200,7 @@ async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
                 "access_token": credentials.token,
                 "refresh_token": credentials.refresh_token,
                 "expires_at": credentials.expiry,
+                "scopes": list(credentials.scopes or GMAIL_SCOPES),
             }
         },
         upsert=True,

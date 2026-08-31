@@ -1,19 +1,21 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Download, Pause, Pencil, Play, Square } from "lucide-react";
+import { ArrowLeft, Download, FlaskConical, Pause, Pencil, Play, Square } from "lucide-react";
 import { toast } from "sonner";
 import { apiGet, apiPatch } from "@/lib/api";
 import type { CsvCampaign, ScheduledEmail } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { SkeletonRows, Surface } from "@/components/rohly/Primitives";
 import { StatusBadge } from "@/components/rohly/StatusBadge";
+import { TestEmailDialog } from "@/components/rohly/TestEmailDialog";
 
 const tabs = ["Overview", "Sequence", "Leads", "Analytics", "Activity", "Settings"];
 
 export default function CampaignDetail() {
   const { campaignId } = useParams();
   const [tab, setTab] = useState("Overview");
+  const [testOpen, setTestOpen] = useState(false);
   const client = useQueryClient();
   const campaigns = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
   const activity = useQuery({ queryKey: ["campaign-activity", campaignId], queryFn: () => apiGet<ScheduledEmail[]>(`/csv/campaigns/${campaignId}/activity`), enabled: Boolean(campaignId) });
@@ -29,7 +31,7 @@ export default function CampaignDetail() {
   return <div data-testid="campaign-detail-page">
     <Link to="/campaigns" className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-900"><ArrowLeft size={13} /> Campaigns</Link>
     <div className="sticky top-16 z-20 -mx-4 border-y border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-7 lg:px-7" data-testid="campaign-action-bar">
-      <div className="mx-auto flex max-w-[1444px] flex-wrap items-center justify-between gap-4"><div><div className="flex items-center gap-3"><h1 className="text-2xl font-semibold tracking-[-0.03em]">{campaign.name}</h1><StatusBadge status={campaign.status} /></div><p className="mt-1 text-xs text-slate-500">{campaign.source_filename} · {campaign.timezone}</p></div><div className="flex gap-2"><Button render={<Link to={`/campaigns/${campaign.id}/edit`} />} className="gap-2 bg-blue-700 hover:bg-blue-800" data-testid="edit-campaign-button"><Pencil size={13} /> Edit</Button>{campaign.status === "running" ? <Button onClick={() => status.mutate("paused")} variant="outline" className="gap-2"><Pause size={13} /> Pause</Button> : campaign.status === "paused" ? <Button onClick={() => status.mutate("running")} variant="outline" className="gap-2"><Play size={13} /> Resume</Button> : null}{!["stopped", "completed"].includes(campaign.status) ? <Button onClick={() => status.mutate("stopped")} variant="outline" className="gap-2 text-red-600"><Square size={12} /> Stop</Button> : null}<Button variant="outline" onClick={() => { window.location.href = `/api/csv/campaigns/${campaign.id}/export`; }} className="gap-2"><Download size={13} /> Export</Button></div></div>
+      <div className="mx-auto flex max-w-[1444px] flex-wrap items-center justify-between gap-4"><div><div className="flex items-center gap-3"><h1 className="text-2xl font-semibold tracking-[-0.03em]">{campaign.name}</h1><StatusBadge status={campaign.status} /></div><p className="mt-1 text-xs text-slate-500">{campaign.source_filename} · {campaign.timezone}</p></div><div className="flex gap-2"><Button onClick={() => setTestOpen(true)} variant="outline" className="gap-2" data-testid="open-test-email-button"><FlaskConical size={13} /> Send test</Button><Button render={<Link to={`/campaigns/${campaign.id}/edit`} />} className="gap-2 bg-blue-700 hover:bg-blue-800" data-testid="edit-campaign-button"><Pencil size={13} /> Edit</Button>{campaign.status === "running" ? <Button onClick={() => status.mutate("paused")} variant="outline" className="gap-2"><Pause size={13} /> Pause</Button> : campaign.status === "paused" ? <Button onClick={() => status.mutate("running")} variant="outline" className="gap-2"><Play size={13} /> Resume</Button> : null}{!["stopped", "completed"].includes(campaign.status) ? <Button onClick={() => status.mutate("stopped")} variant="outline" className="gap-2 text-red-600"><Square size={12} /> Stop</Button> : null}<Button variant="outline" onClick={() => { window.location.href = `/api/csv/campaigns/${campaign.id}/export`; }} className="gap-2"><Download size={13} /> Export</Button></div></div>
     </div>
     <div className="mt-5 flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist">{tabs.map((item) => <button key={item} onClick={() => setTab(item)} className={`border-b-2 px-4 py-3 text-xs font-semibold transition-colors ${tab === item ? "border-blue-700 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900"}`} role="tab" aria-selected={tab === item}>{item}</button>)}</div>
     <div className="mt-5">
@@ -40,6 +42,7 @@ export default function CampaignDetail() {
       {tab === "Activity" ? <Activity events={events} /> : null}
       {tab === "Settings" ? <Surface className="p-5" testId="campaign-settings"><h2 className="text-sm font-semibold">Campaign settings</h2><p className="mt-2 text-xs leading-relaxed text-slate-500">Timezone: {campaign.timezone}. Use Edit to change source rows, mappings, inboxes, or schedule. Rohly protects sent, failed, and replied history while rebuilding future unsent emails.</p></Surface> : null}
     </div>
+    {testOpen ? <TestEmailDialog campaignId={campaign.id} inboxCount={campaign.inbox_ids.length} onClose={() => setTestOpen(false)} /> : null}
   </div>;
 }
 

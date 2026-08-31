@@ -114,6 +114,8 @@ export interface CsvCampaignLaunchResponse {
 
 export interface CampaignEditImpact { added: number; removed: number; rescheduled: number; unchanged: number; protected: number; skipped_leads: number; proposed_scheduled: number }
 export interface CampaignEditResult { campaign: CsvCampaign; impact: CampaignEditImpact }
+export interface TestEmailInboxResult { inbox_id: string; inbox_email: string; success: boolean; message_id: string | null; error: string | null }
+export interface TestEmailResponse { campaign_id: string; recipient_email: string; sent_count: number; failed_count: number; results: TestEmailInboxResult[] }
 
 export interface ScheduledEmail {
   id: string;

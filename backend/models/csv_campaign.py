@@ -134,3 +134,25 @@ class CampaignEditImpact(BaseModel):
 class CampaignEditResult(BaseModel):
     campaign: CsvCampaign
     impact: CampaignEditImpact
+
+
+class TestEmailRequest(BaseModel):
+    recipient_email: str = Field(min_length=3, max_length=320)
+    subject: str = Field(min_length=1, max_length=998)
+    body: str = Field(min_length=1, max_length=100000)
+
+
+class TestEmailInboxResult(BaseModel):
+    inbox_id: str
+    inbox_email: str
+    success: bool
+    message_id: str | None = None
+    error: str | None = None
+
+
+class TestEmailResponse(BaseModel):
+    campaign_id: str
+    recipient_email: str
+    sent_count: int
+    failed_count: int
+    results: list[TestEmailInboxResult]
