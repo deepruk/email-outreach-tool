@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from models.scheduler import new_id
 
@@ -42,6 +42,14 @@ class CsvCampaignCreate(BaseModel):
     inbox_ids: list[str] = Field(min_length=1)
     steps: list[SequenceStepInput] = Field(min_length=1)
     timezone: str = "Asia/Kolkata"
+    min_gap_minutes: int = Field(default=10, ge=1, le=1440)
+    max_gap_minutes: int = Field(default=20, ge=1, le=1440)
+
+    @model_validator(mode="after")
+    def validate_gap(self) -> "CsvCampaignCreate":
+        if self.min_gap_minutes > self.max_gap_minutes:
+            raise ValueError("Minimum gap must be less than or equal to maximum gap")
+        return self
 
 
 class CsvCampaign(BaseModel):
@@ -56,6 +64,8 @@ class CsvCampaign(BaseModel):
     inbox_ids: list[str]
     steps: list[SequenceStepInput]
     timezone: str
+    min_gap_minutes: int = Field(default=10, ge=1, le=1440)
+    max_gap_minutes: int = Field(default=20, ge=1, le=1440)
     total_leads: int
     emails_sent: int = 0
     emails_scheduled: int = 0

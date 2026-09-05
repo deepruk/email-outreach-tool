@@ -65,6 +65,7 @@ class LeadSummary(BaseModel):
     next_step: str | None = None
     next_step_at: datetime | None = None
     inbox_email: str
+    timezone: str
     paused: bool = False
 
 

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SkeletonRows, Surface } from "@/components/rohly/Primitives";
 import { StatusBadge } from "@/components/rohly/StatusBadge";
 import { TestEmailDialog } from "@/components/rohly/TestEmailDialog";
+import { formatCampaignDateTime } from "@/lib/dates";
 
 const tabs = ["Overview", "Sequence", "Leads", "Analytics", "Activity", "Settings"];
 
@@ -39,7 +40,7 @@ export default function CampaignDetail() {
       {tab === "Sequence" ? <Sequence campaign={campaign} /> : null}
       {tab === "Leads" ? <Leads events={events} leadEmails={leadEmails} /> : null}
       {tab === "Analytics" ? <CampaignAnalytics campaign={campaign} /> : null}
-      {tab === "Activity" ? <Activity events={events} /> : null}
+      {tab === "Activity" ? <Activity events={events} timezone={campaign.timezone} /> : null}
       {tab === "Settings" ? <Surface className="p-5" testId="campaign-settings"><h2 className="text-sm font-semibold">Campaign settings</h2><p className="mt-2 text-xs leading-relaxed text-slate-500">Timezone: {campaign.timezone}. Use Edit to change source rows, mappings, inboxes, or schedule. Rohly protects sent, failed, and replied history while rebuilding future unsent emails.</p></Surface> : null}
     </div>
     {testOpen ? <TestEmailDialog campaignId={campaign.id} inboxCount={campaign.inbox_ids.length} onClose={() => setTestOpen(false)} /> : null}
@@ -59,8 +60,8 @@ function Leads({ events, leadEmails }: { events: ScheduledEmail[]; leadEmails: s
   return <Surface testId="campaign-leads-list"><div className="divide-y divide-slate-100">{leadEmails.map((email) => { const rows = events.filter((item) => item.recipient_email === email); return <div key={email} className="grid gap-3 px-4 py-3 text-xs sm:grid-cols-[1fr_1fr_120px]"><div><p className="font-semibold">{rows[0]?.first_name || email}</p><p className="mt-1 text-slate-400">{email}</p></div><p className="text-slate-500">{rows[0]?.company || "—"}</p><StatusBadge status={rows.some((item) => item.replied_at) ? "replied" : rows[0]?.status || "scheduled"} /></div>; })}</div></Surface>;
 }
 
-function Activity({ events }: { events: ScheduledEmail[] }) {
-  return <Surface testId="campaign-activity"><div className="divide-y divide-slate-100">{events.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"><div><p className="text-xs font-semibold">{item.first_name || item.recipient_email} · {item.step_label}</p><p className="mt-1 text-[11px] text-slate-400">{item.subject}</p></div><div className="text-right"><StatusBadge status={item.status} /><p className="mt-1 text-[10px] text-slate-400">{new Date(item.scheduled_at).toLocaleString()}</p></div></div>)}</div></Surface>;
+function Activity({ events, timezone }: { events: ScheduledEmail[]; timezone: string }) {
+  return <Surface testId="campaign-activity"><div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-medium text-slate-500" data-testid="campaign-timezone-label">All times shown in {timezone}</div><div className="divide-y divide-slate-100">{events.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"><div><p className="text-xs font-semibold">{item.first_name || item.recipient_email} · {item.step_label}</p><p className="mt-1 text-[11px] text-slate-400">{item.subject}</p></div><div className="text-right"><StatusBadge status={item.status} /><p className="mt-1 text-[10px] text-slate-400" data-testid={`campaign-event-time-${item.id}`}>{formatCampaignDateTime(item.scheduled_at, timezone)}</p></div></div>)}</div></Surface>;
 }
 
 function CampaignAnalytics({ campaign }: { campaign: CsvCampaign }) {

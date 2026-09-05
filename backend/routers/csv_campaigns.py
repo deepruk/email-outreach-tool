@@ -116,26 +116,31 @@ async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tup
     existing_other = await db.scheduled_emails.find({
         "campaign_id": {"$ne": campaign_id},
         "inbox_id": {"$in": input.inbox_ids},
-        "status": {"$nin": ["cancelled", "skipped"]},
+        "status": {"$in": ["scheduled", "sending", "sent"]},
     }).to_list(100000)
     usage: dict[tuple[str, str], int] = {}
+    occupied: dict[str, list[datetime]] = {inbox.id: [] for inbox in inboxes}
     for item in existing_other:
-        value = item.get("scheduled_at")
+        value = item.get("sent_at") or item.get("scheduled_at")
         if value:
             if value.tzinfo is None:
                 value = value.replace(tzinfo=timezone.utc)
-            key = (item["inbox_id"], value.astimezone(zone).date().isoformat())
+            local_value = value.astimezone(zone)
+            key = (item["inbox_id"], local_value.date().isoformat())
             usage[key] = usage.get(key, 0) + 1
-    last_slots: dict[tuple[str, str], datetime] = {}
+            occupied.setdefault(item["inbox_id"], []).append(local_value)
+    for slots in occupied.values():
+        slots.sort()
     scheduled: list[ScheduledEmail] = []
     inbox_index = 0
+    pending: list[tuple[datetime, int, int, dict[str, str], object]] = []
     for row_index, row in enumerate(source.rows, start=2):
         email = row.get(input.email_column, "").strip()
         if not email or "@" not in email:
             continue
         if any(not row.get(step.subject_column, "") or not row.get(step.body_column, "") for step in input.steps):
             continue
-        for step in input.steps:
+        for step_index, step in enumerate(input.steps):
             try:
                 hour, minute = [int(value) for value in step.send_time.split(":", 1)]
                 base_send = datetime.combine(
@@ -145,38 +150,48 @@ async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tup
                 raise HTTPException(status_code=422, detail=f"Invalid send time for {step.label}") from exc
             if step.day_offset == 0 and base_send <= now_local:
                 base_send = now_local + timedelta(minutes=1)
-            selected: Inbox | None = None
-            selected_send = base_send
-            for _ in range(len(inboxes)):
-                candidate = inboxes[inbox_index % len(inboxes)]
-                inbox_index += 1
-                previous = last_slots.get((candidate.id, step.key))
-                deterministic_gap = random.Random(f"{campaign_id}:{candidate.id}:{step.key}:{row_index}").randint(10, 20)
-                candidate_send = base_send if not previous else max(base_send, previous + timedelta(minutes=deterministic_gap))
-                usage_key = (candidate.id, candidate_send.date().isoformat())
-                if usage.get(usage_key, 0) < candidate.daily_sending_limit:
-                    selected = candidate
-                    selected_send = candidate_send
-                    usage[usage_key] = usage.get(usage_key, 0) + 1
-                    last_slots[(candidate.id, step.key)] = candidate_send
-                    break
-            if not selected:
-                raise HTTPException(status_code=409, detail=f"Daily inbox limits are too low for {base_send.date().isoformat()}")
-            scheduled.append(ScheduledEmail(
-                campaign_id=campaign_id,
-                campaign_name=input.name,
-                source_id=source.id,
-                row_index=row_index,
-                recipient_email=email,
-                first_name=row.get(input.first_name_column or "", ""),
-                company=row.get(input.company_column or "", ""),
-                step_key=step.key,
-                step_label=step.label,
-                subject=row[step.subject_column],
-                body=row[step.body_column],
-                inbox_id=selected.id,
-                scheduled_at=selected_send.astimezone(timezone.utc),
-            ))
+            pending.append((base_send, row_index, step_index, row, step))
+    pending.sort(key=lambda item: (item[0], item[1], item[2]))
+    for base_send, row_index, _, row, step_value in pending:
+        step = step_value
+        selected: Inbox | None = None
+        selected_send = base_send
+        for _ in range(len(inboxes)):
+            candidate = inboxes[inbox_index % len(inboxes)]
+            inbox_index += 1
+            deterministic_gap = random.Random(f"{campaign_id}:{candidate.id}:{step.key}:{row_index}").randint(
+                input.min_gap_minutes, input.max_gap_minutes
+            )
+            gap = timedelta(minutes=deterministic_gap)
+            candidate_send = base_send
+            for occupied_at in occupied.get(candidate.id, []):
+                if abs((candidate_send - occupied_at).total_seconds()) < gap.total_seconds():
+                    candidate_send = occupied_at + gap
+            usage_key = (candidate.id, candidate_send.date().isoformat())
+            if usage.get(usage_key, 0) < candidate.daily_sending_limit:
+                selected = candidate
+                selected_send = candidate_send
+                usage[usage_key] = usage.get(usage_key, 0) + 1
+                occupied.setdefault(candidate.id, []).append(candidate_send)
+                occupied[candidate.id].sort()
+                break
+        if not selected:
+            raise HTTPException(status_code=409, detail=f"Daily inbox limits are too low for {base_send.date().isoformat()}")
+        scheduled.append(ScheduledEmail(
+            campaign_id=campaign_id,
+            campaign_name=input.name,
+            source_id=source.id,
+            row_index=row_index,
+            recipient_email=email,
+            first_name=row.get(input.first_name_column or "", ""),
+            company=row.get(input.company_column or "", ""),
+            step_key=step.key,
+            step_label=step.label,
+            subject=row[step.subject_column],
+            body=row[step.body_column],
+            inbox_id=selected.id,
+            scheduled_at=selected_send.astimezone(timezone.utc),
+        ))
     return scheduled, preview.skipped_count
 
 
@@ -423,94 +438,20 @@ async def launch_campaign(campaign_id: str) -> CsvCampaignLaunchResponse:
     campaign = CsvCampaign(**campaign_row)
     if campaign.status != "draft":
         raise HTTPException(status_code=409, detail="Campaign has already been launched")
-    source_row = await db.csv_sources.find_one({"id": campaign.source_id})
-    if not source_row:
-        raise HTTPException(status_code=404, detail="CSV source not found")
-    source = CsvSource(**source_row)
-    inbox_rows = await db.inboxes.find({"id": {"$in": campaign.inbox_ids}, "status": "connected"}).to_list(100)
-    inboxes = [Inbox(**row) for row in inbox_rows]
-    if not inboxes:
-        raise HTTPException(status_code=422, detail="Connect at least one sending inbox")
-    zone = ZoneInfo(campaign.timezone)
-    now_local = datetime.now(zone)
-    scheduled: list[ScheduledEmail] = []
-    skipped = campaign.skipped_leads
-    inbox_index = 0
-    usage: dict[tuple[str, str], int] = {}
-    last_slots: dict[tuple[str, str], datetime] = {}
-    existing = await db.scheduled_emails.find(
-        {"inbox_id": {"$in": [inbox.id for inbox in inboxes]}, "status": {"$nin": ["cancelled", "skipped"]}}
-    ).to_list(100000)
-    for item in existing:
-        existing_at = item.get("scheduled_at")
-        if existing_at:
-            if existing_at.tzinfo is None:
-                existing_at = existing_at.replace(tzinfo=timezone.utc)
-            day_key = existing_at.astimezone(zone).date().isoformat()
-            usage[(item["inbox_id"], day_key)] = usage.get((item["inbox_id"], day_key), 0) + 1
-    for row_index, row in enumerate(source.rows, start=2):
-        email = row.get(campaign.email_column, "").strip()
-        invalid = not email or "@" not in email
-        if invalid:
-            continue
-        for step in campaign.steps:
-            subject = row.get(step.subject_column, "")
-            body = row.get(step.body_column, "")
-            if not subject or not body:
-                invalid = True
-                break
-        if invalid:
-            continue
-        for step in campaign.steps:
-            try:
-                hour, minute = [int(value) for value in step.send_time.split(":", 1)]
-                local_send = datetime.combine(
-                    now_local.date() + timedelta(days=step.day_offset),
-                    time(hour=hour, minute=minute),
-                    zone,
-                )
-            except (ValueError, TypeError) as exc:
-                raise HTTPException(status_code=422, detail=f"Invalid send time for {step.label}") from exc
-            if step.day_offset == 0 and local_send <= now_local:
-                local_send = now_local + timedelta(minutes=1)
-            selected: Inbox | None = None
-            selected_send = local_send
-            for _ in range(len(inboxes)):
-                candidate = inboxes[inbox_index % len(inboxes)]
-                inbox_index += 1
-                previous = last_slots.get((candidate.id, step.key))
-                candidate_send = local_send if not previous else max(
-                    local_send, previous + timedelta(minutes=random.randint(10, 20))
-                )
-                key = (candidate.id, candidate_send.date().isoformat())
-                if usage.get(key, 0) < candidate.daily_sending_limit:
-                    selected = candidate
-                    selected_send = candidate_send
-                    usage[key] = usage.get(key, 0) + 1
-                    last_slots[(candidate.id, step.key)] = candidate_send
-                    break
-            if not selected:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Daily inbox limits are too low for {local_send.date().isoformat()}",
-                )
-            scheduled.append(
-                ScheduledEmail(
-                    campaign_id=campaign.id,
-                    campaign_name=campaign.name,
-                    source_id=source.id,
-                    row_index=row_index,
-                    recipient_email=email,
-                    first_name=row.get(campaign.first_name_column or "", ""),
-                    company=row.get(campaign.company_column or "", ""),
-                    step_key=step.key,
-                    step_label=step.label,
-                    subject=row[step.subject_column],
-                    body=row[step.body_column],
-                    inbox_id=selected.id,
-                    scheduled_at=selected_send.astimezone(timezone.utc),
-                )
-            )
+    configuration = CsvCampaignCreate(
+        name=campaign.name,
+        source_id=campaign.source_id,
+        email_column=campaign.email_column,
+        first_name_column=campaign.first_name_column,
+        company_column=campaign.company_column,
+        status_column=campaign.status_column,
+        inbox_ids=campaign.inbox_ids,
+        steps=campaign.steps,
+        timezone=campaign.timezone,
+        min_gap_minutes=campaign.min_gap_minutes,
+        max_gap_minutes=campaign.max_gap_minutes,
+    )
+    scheduled, skipped = await build_edit_schedule(campaign.id, configuration)
     if not scheduled:
         raise HTTPException(status_code=422, detail="No complete emails are available to schedule")
     await db.scheduled_emails.insert_many([item.model_dump() for item in scheduled])

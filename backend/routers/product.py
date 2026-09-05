@@ -172,6 +172,7 @@ async def leads(page: int = Query(default=1, ge=1), page_size: int = Query(defau
             next_step=upcoming.get("step_label") if upcoming else None,
             next_step_at=aware(upcoming.get("scheduled_at")) if upcoming else None,
             inbox_email=inbox_lookup.get(first["inbox_id"], "Unknown inbox"),
+            timezone=(campaign or {}).get("timezone", "UTC"),
             paused=bool(campaign and campaign.get("status") == "paused"),
         ))
     return LeadPage(items=items, total=total, page=page, page_size=page_size)

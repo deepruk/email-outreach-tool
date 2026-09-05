@@ -84,3 +84,8 @@ android-sdk/
 # Testing workspace artifacts
 /tests/test-results/
 
+
+# Environment variables and secrets
+**/.env
+**/.env.*
+!**/.env.example
