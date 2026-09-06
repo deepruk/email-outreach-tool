@@ -286,37 +286,149 @@ async def analytics(days: int = Query(default=30, ge=7, le=365)) -> AnalyticsSum
     )
 
 
+def normalize_subject(subject: str) -> str:
+    """Normalize email subjects so Re:/RE:/Fwd: prefixes do not block matching."""
+    value = " ".join((subject or "").strip().split()).lower()
+    while True:
+        updated = value
+        for prefix in ("re:", "fw:", "fwd:"):
+            if value.startswith(prefix):
+                value = value[len(prefix):].strip()
+        if value == updated:
+            return value
+
+
+async def find_sent_campaign_email(
+    inbox_id: str,
+    sender_email: str,
+    thread_id: str,
+    subject: str,
+) -> dict | None:
+    """Find the campaign email that a Gmail reply belongs to.
+
+    Thread ID is the strongest match. If Gmail returns a different thread ID,
+    fall back to recipient + subject, then recipient-only when there is exactly
+    one recent campaign recipient match.
+    """
+    sender_email = sender_email.strip().lower()
+    if not sender_email:
+        return None
+
+    # 1. Normal case: Gmail thread ID matches the stored sent message.
+    if thread_id:
+        sent = await db.scheduled_emails.find_one(
+            {"inbox_id": inbox_id, "thread_id": thread_id, "status": "sent"},
+            sort=[("sent_at", -1)],
+        )
+        if sent:
+            return sent
+
+    # 2. Robust fallback: match the person who replied and the email subject.
+    cutoff = datetime.now(timezone.utc) - timedelta(days=60)
+    candidates = await db.scheduled_emails.find(
+        {
+            "inbox_id": inbox_id,
+            "recipient_email": sender_email,
+            "status": "sent",
+            "sent_at": {"$gte": cutoff},
+        }
+    ).sort("sent_at", -1).to_list(100)
+
+    if not candidates:
+        # Be tolerant of historical records where email casing differs.
+        candidates = await db.scheduled_emails.find(
+            {
+                "inbox_id": inbox_id,
+                "status": "sent",
+                "sent_at": {"$gte": cutoff},
+            }
+        ).sort("sent_at", -1).to_list(500)
+        candidates = [
+            row for row in candidates
+            if row.get("recipient_email", "").strip().lower() == sender_email
+        ]
+
+    normalized_reply_subject = normalize_subject(subject)
+    if normalized_reply_subject:
+        for candidate in candidates:
+            if normalize_subject(candidate.get("subject", "")) == normalized_reply_subject:
+                return candidate
+
+    # 3. Last fallback: if this person has only one recent campaign thread,
+    # use it even when Gmail changed/omitted the thread or subject.
+    if len(candidates) == 1:
+        return candidates[0]
+
+    return candidates[0] if candidates else None
+
+
 async def sync_replies_once() -> None:
     inbox_rows = await db.inboxes.find({"is_mocked": False, "status": "connected"}).to_list(100)
+
     for inbox in inbox_rows:
         try:
             credentials = await get_gmail_credentials(inbox["id"])
             service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+
+            # Search a wider window so replies are not missed just because they
+            # arrived more than 14 days after the original campaign email.
             listing = await asyncio.to_thread(
-                lambda: service.users().messages().list(userId="me", q="newer_than:14d -from:me", maxResults=100).execute()
+                lambda: service.users().messages().list(
+                    userId="me",
+                    q="newer_than:60d -from:me",
+                    maxResults=100,
+                ).execute()
             )
+
             for message_ref in listing.get("messages", []):
-                if await db.replies.find_one({"gmail_message_id": message_ref["id"]}):
+                gmail_message_id = message_ref["id"]
+
+                if await db.replies.find_one({"gmail_message_id": gmail_message_id}):
                     continue
+
                 message = await asyncio.to_thread(
-                    lambda message_id=message_ref["id"]: service.users().messages().get(
-                        userId="me", id=message_id, format="metadata", metadataHeaders=["From", "Subject", "Date"]
+                    lambda message_id=gmail_message_id: service.users().messages().get(
+                        userId="me",
+                        id=message_id,
+                        format="metadata",
+                        metadataHeaders=["From", "Subject", "Date"],
                     ).execute()
                 )
-                thread_id = message.get("threadId", "")
-                sent = await db.scheduled_emails.find_one({"thread_id": thread_id, "status": "sent"}, sort=[("sent_at", -1)])
-                if not sent:
-                    continue
-                headers = {item["name"].lower(): item["value"] for item in message.get("payload", {}).get("headers", [])}
+
+                headers = {
+                    item["name"].lower(): item["value"]
+                    for item in message.get("payload", {}).get("headers", [])
+                }
                 sender_name, sender_email = parseaddr(headers.get("from", ""))
-                if sender_email.lower() == inbox["email"].lower():
+
+                if not sender_email:
                     continue
+
+                if sender_email.strip().lower() == inbox["email"].strip().lower():
+                    continue
+
+                thread_id = message.get("threadId", "")
+                subject = headers.get("subject", "Reply")
+
+                sent = await find_sent_campaign_email(
+                    inbox_id=inbox["id"],
+                    sender_email=sender_email,
+                    thread_id=thread_id,
+                    subject=subject,
+                )
+                if not sent:
+                    # This is an unrelated Gmail message, not a campaign reply.
+                    continue
+
                 try:
-                    received_at = parsedate_to_datetime(headers.get("date", "")).astimezone(timezone.utc)
-                except (TypeError, ValueError):
+                    received_at = parsedate_to_datetime(
+                        headers.get("date", "")
+                    ).astimezone(timezone.utc)
+                except (TypeError, ValueError, OverflowError):
                     received_at = datetime.now(timezone.utc)
+
                 reply = Reply(
-                    gmail_message_id=message["id"],
+                    gmail_message_id=gmail_message_id,
                     thread_id=thread_id,
                     inbox_id=inbox["id"],
                     inbox_email=inbox["email"],
@@ -324,25 +436,65 @@ async def sync_replies_once() -> None:
                     campaign_name=sent["campaign_name"],
                     recipient_email=sent["recipient_email"],
                     sender_name=sender_name or sender_email or sent["recipient_email"],
-                    subject=headers.get("subject", "Reply"),
+                    subject=subject,
                     snippet=message.get("snippet", ""),
                     received_at=received_at,
                 )
+
                 await db.replies.insert_one(reply.model_dump())
+
+                # Mark the whole recipient's campaign sequence as replied and
+                # cancel any remaining follow-ups.
                 await db.scheduled_emails.update_many(
-                    {"campaign_id": sent["campaign_id"], "recipient_email": sent["recipient_email"]},
+                    {
+                        "campaign_id": sent["campaign_id"],
+                        "recipient_email": sent["recipient_email"],
+                    },
                     {"$set": {"replied_at": received_at}},
                 )
                 await db.scheduled_emails.update_many(
-                    {"campaign_id": sent["campaign_id"], "recipient_email": sent["recipient_email"], "status": "scheduled"},
-                    {"$set": {"status": "cancelled", "error": "Cancelled after reply detected"}},
+                    {
+                        "campaign_id": sent["campaign_id"],
+                        "recipient_email": sent["recipient_email"],
+                        "status": "scheduled",
+                    },
+                    {
+                        "$set": {
+                            "status": "cancelled",
+                            "error": "Cancelled after reply detected",
+                        }
+                    },
                 )
-                await db.csv_campaigns.update_one({"id": sent["campaign_id"]}, {"$inc": {"replies": 1}})
+
+                await db.csv_campaigns.update_one(
+                    {"id": sent["campaign_id"]},
+                    {"$inc": {"replies": 1}},
+                )
+
             await db.inboxes.update_one(
-                {"id": inbox["id"]}, {"$set": {"reply_tracking_status": "active", "last_reply_sync_at": datetime.now(timezone.utc)}}
+                {"id": inbox["id"]},
+                {
+                    "$set": {
+                        "reply_tracking_status": "active",
+                        "last_reply_sync_at": datetime.now(timezone.utc),
+                        "last_reply_sync_error": None,
+                    }
+                },
             )
-        except Exception:
-            await db.inboxes.update_one({"id": inbox["id"]}, {"$set": {"reply_tracking_status": "reconnect_required"}})
+
+        except Exception as exc:
+            # Keep the inbox marked as needing attention, but retain the actual
+            # error so the problem is no longer silently hidden.
+            await db.inboxes.update_one(
+                {"id": inbox["id"]},
+                {
+                    "$set": {
+                        "reply_tracking_status": "reconnect_required",
+                        "last_reply_sync_error": str(exc)[:1000],
+                        "last_reply_sync_failed_at": datetime.now(timezone.utc),
+                    }
+                },
+            )
 
 
 @router.post("/replies/sync")
