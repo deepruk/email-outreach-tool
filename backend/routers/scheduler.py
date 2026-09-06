@@ -116,8 +116,22 @@ async def get_gmail_credentials(inbox_id: str, required_scopes: list[str] | None
 async def send_gmail_message(inbox_id: str, recipient_email: str, subject: str, body: str) -> dict[str, str | None]:
     credentials = await get_gmail_credentials(inbox_id, GMAIL_SEND_SCOPES)
 
+    # The signature belongs to the sending inbox. This means every inbox can
+    # have its own signature, and the correct one is selected automatically
+    # from the inbox_id used for the send.
+    inbox = await db.inboxes.find_one({"id": inbox_id})
+    signature = (inbox or {}).get("signature", "") or ""
+    signature = signature.strip()
+
+    final_body = body or ""
+    if signature:
+        # Do not append the same signature twice if a message body already
+        # contains the configured inbox signature.
+        if not final_body.rstrip().endswith(signature):
+            final_body = f"{final_body.rstrip()}\n\n{signature}"
+
     def send() -> dict[str, str | None]:
-        message = MIMEText(body, "plain", "utf-8")
+        message = MIMEText(final_body, "plain", "utf-8")
         message["to"] = recipient_email
         message["subject"] = subject
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
