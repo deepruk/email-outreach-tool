@@ -162,6 +162,21 @@ async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tup
     scheduled: list[ScheduledEmail] = []
     inbox_index = 0
     pending: list[tuple[datetime, int, int, dict[str, str], object]] = []
+
+    # For sequence scheduling, day_offset is the delay from the previous
+    # email. The first step is day 0; later steps accumulate their delays.
+    cumulative_offsets: dict[int, int] = {}
+    cumulative_day_offset = 0
+    for step_index, step in enumerate(input.steps):
+        if step_index == 0:
+            if step.day_offset != 0:
+                raise HTTPException(status_code=422, detail="Initial email must use 0 days")
+        else:
+            if step.day_offset < 1:
+                raise HTTPException(status_code=422, detail=f"{step.label} must be at least 1 day after the previous email")
+            cumulative_day_offset += step.day_offset
+        cumulative_offsets[step_index] = cumulative_day_offset
+
     for row_index, row in enumerate(source.rows, start=2):
         email = row.get(input.email_column, "").strip()
         if not email or "@" not in email:
@@ -172,7 +187,9 @@ async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tup
             try:
                 hour, minute = [int(value) for value in step.send_time.split(":", 1)]
                 base_send = datetime.combine(
-                    now_local.date() + timedelta(days=step.day_offset), time(hour=hour, minute=minute), zone
+                    now_local.date() + timedelta(days=cumulative_offsets[step_index]),
+                    time(hour=hour, minute=minute),
+                    zone,
                 )
             except (ValueError, TypeError) as exc:
                 raise HTTPException(status_code=422, detail=f"Invalid send time for {step.label}") from exc
