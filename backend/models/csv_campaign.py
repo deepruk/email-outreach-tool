@@ -44,11 +44,27 @@ class CsvCampaignCreate(BaseModel):
     timezone: str = "Asia/Kolkata"
     min_gap_minutes: int = Field(default=10, ge=1, le=1440)
     max_gap_minutes: int = Field(default=20, ge=1, le=1440)
+    sending_window_start: str = "09:00"
+    sending_window_end: str = "18:00"
+    sending_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
 
     @model_validator(mode="after")
-    def validate_gap(self) -> "CsvCampaignCreate":
+    def validate_schedule(self) -> "CsvCampaignCreate":
         if self.min_gap_minutes > self.max_gap_minutes:
             raise ValueError("Minimum gap must be less than or equal to maximum gap")
+        def minutes(value: str) -> int:
+            try:
+                hour, minute = value.split(":", 1)
+                hour_i, minute_i = int(hour), int(minute)
+            except (ValueError, TypeError):
+                raise ValueError("Working hours must use HH:MM format")
+            if hour_i < 0 or hour_i > 23 or minute_i < 0 or minute_i > 59:
+                raise ValueError("Working hours must use HH:MM format")
+            return hour_i * 60 + minute_i
+        if minutes(self.sending_window_start) >= minutes(self.sending_window_end):
+            raise ValueError("Working-hours start must be before the end time")
+        if not self.sending_days or any(day < 0 or day > 6 for day in self.sending_days) or len(set(self.sending_days)) != len(self.sending_days):
+            raise ValueError("Working days must contain unique values from 0 (Monday) to 6 (Sunday)")
         return self
 
 
@@ -66,6 +82,9 @@ class CsvCampaign(BaseModel):
     timezone: str
     min_gap_minutes: int = Field(default=10, ge=1, le=1440)
     max_gap_minutes: int = Field(default=20, ge=1, le=1440)
+    sending_window_start: str = "09:00"
+    sending_window_end: str = "18:00"
+    sending_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
     total_leads: int
     emails_sent: int = 0
     emails_scheduled: int = 0
