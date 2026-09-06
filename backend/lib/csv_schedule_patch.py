@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
-from models.csv_campaign import CsvCampaignCreate
+from models.csv_campaign import CsvCampaign, CsvCampaignCreate, CsvCampaignLaunchResponse
 from routers import csv_campaigns as csv
 from lib.db import db
 
@@ -81,3 +81,51 @@ async def build_edit_schedule_with_window(campaign_id: str, input: CsvCampaignCr
 
 
 csv.build_edit_schedule = build_edit_schedule_with_window
+
+
+async def launch_campaign_with_saved_schedule(campaign_id: str) -> CsvCampaignLaunchResponse:
+    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id})
+    if not campaign_row:
+        raise HTTPException(status_code=404, detail="CSV campaign not found")
+    campaign = CsvCampaign(**campaign_row)
+    if campaign.status != "draft":
+        raise HTTPException(status_code=409, detail="Campaign has already been launched")
+    configuration = CsvCampaignCreate(
+        name=campaign.name,
+        source_id=campaign.source_id,
+        email_column=campaign.email_column,
+        first_name_column=campaign.first_name_column,
+        company_column=campaign.company_column,
+        status_column=campaign.status_column,
+        inbox_ids=campaign.inbox_ids,
+        steps=campaign.steps,
+        timezone=campaign.timezone,
+        min_gap_minutes=campaign.min_gap_minutes,
+        max_gap_minutes=campaign.max_gap_minutes,
+        sending_window_start=campaign.sending_window_start,
+        sending_window_end=campaign.sending_window_end,
+        sending_days=campaign.sending_days,
+    )
+    scheduled, skipped = await csv.build_edit_schedule(campaign.id, configuration)
+    if not scheduled:
+        raise HTTPException(status_code=422, detail="No complete emails are available to schedule")
+    await db.scheduled_emails.insert_many([item.model_dump() for item in scheduled])
+    launched_at = datetime.now(timezone.utc)
+    updates = {
+        "status": "running",
+        "launched_at": launched_at,
+        "emails_scheduled": len(scheduled),
+        "follow_ups_scheduled": sum(1 for item in scheduled if item.step_key != campaign.steps[0].key),
+    }
+    await db.csv_campaigns.update_one({"id": campaign.id}, {"$set": updates})
+    return CsvCampaignLaunchResponse(
+        campaign=CsvCampaign(**{**campaign.model_dump(), **updates}),
+        scheduled_count=len(scheduled),
+        skipped_count=skipped,
+    )
+
+
+csv.launch_campaign = launch_campaign_with_saved_schedule
+for route in csv.router.routes:
+    if getattr(route, "path", None) == "/campaigns/{campaign_id}/launch" and "POST" in getattr(route, "methods", set()):
+        route.endpoint = launch_campaign_with_saved_schedule
