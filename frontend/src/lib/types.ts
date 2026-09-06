@@ -1,208 +1,34 @@
-export interface Inbox {
-  id: string;
-  email: string;
-  display_name: string;
-  provider: "gmail";
-  status: "connected" | "paused" | "error";
-  connected_at: string;
-  last_used_at: string | null;
-  is_mocked: boolean;
-  signature: string;
-  daily_sending_limit: number;
-  reply_tracking_status: "active" | "reconnect_required" | "unavailable";
-  sent_today: number;
-  last_reply_sync_at: string | null;
-}
-
-export interface UserPublic { id: string; email: string; name: string; role: string; created_at: string }
-export interface Metric { label: string; value: number; change: number | null }
-export interface ChartPoint { date: string; sends: number; replies: number; positive_replies: number }
-export interface CampaignPerformance { id: string; name: string; status: string; source: string; leads: number; sent: number; replies: number; positive_replies: number; reply_rate: number; progress: number; created_at: string }
-export interface CommandCenter { emails_sent: Metric; replies: Metric; positive_replies: Metric; active_campaigns: Metric; scheduled: number; failed: number; inboxes_needing_attention: number; chart: ChartPoint[]; campaigns: CampaignPerformance[] }
-export interface SearchResult { id: string; type: "campaign" | "lead" | "inbox" | "reply"; title: string; subtitle: string; href: string }
-export interface LeadSummary { id: string; name: string; email: string; company: string; campaign_id: string; campaign_name: string; status: string; last_activity: string | null; next_step: string | null; next_step_at: string | null; inbox_email: string; timezone: string; paused: boolean }
-export interface LeadPage { items: LeadSummary[]; total: number; page: number; page_size: number }
-export interface Reply { id: string; gmail_message_id: string; thread_id: string; inbox_id: string; inbox_email: string; campaign_id: string; campaign_name: string; recipient_email: string; sender_name: string; subject: string; snippet: string; received_at: string; sentiment: "unclassified" | "positive" | "neutral" | "negative"; read: boolean }
-export interface InboxHealth { id: string; email: string; display_name: string; status: string; reply_tracking_status: string; daily_limit: number; sent_today: number; utilization: number; health_score: number; health: "healthy" | "attention" | "disconnected"; failed_last_7_days: number; last_activity: string | null }
-export interface AnalyticsSummary { date_range_days: number; emails_sent: number; replies: number; positive_replies: number; failed: number; reply_rate: number; positive_reply_rate: number; bounce_rate: number; chart: ChartPoint[]; campaign_comparison: CampaignPerformance[]; inbox_performance: InboxHealth[] }
-export interface BillingConfiguration { provider: string; mode: string; credentials_configured: boolean; product_id_configured: boolean; configured_plan_ids: number; required_plan_ids: number; webhook_configured: boolean; checkout_enabled: boolean; webhook_url: string }
-export interface BillingPlan { key: string; name: string; monthly_price: number; annual_price: number; monthly_email_limit: number; inbox_limit: number; contact_limit: number; features: string[]; monthly_plan_id_configured: boolean; annual_plan_id_configured: boolean }
-
-export interface CsvSource {
-  id: string;
-  filename: string;
-  columns: string[];
-  row_count: number;
-  rows: Record<string, string>[];
-  uploaded_at: string;
-}
-
-export interface CsvSourceSummary {
-  id: string;
-  filename: string;
-  columns: string[];
-  row_count: number;
-  uploaded_at: string;
-}
-
-export interface SequenceStepInput {
-  key: string;
-  label: string;
-  subject_column: string;
-  body_column: string;
-  day_offset: number;
-  send_time: string;
-}
-
-export interface CsvCampaignCreate {
-  name: string;
-  source_id: string;
-  email_column: string;
-  first_name_column: string | null;
-  company_column: string | null;
-  status_column: string | null;
-  inbox_ids: string[];
-  steps: SequenceStepInput[];
-  timezone: string;
-}
-
-export interface CsvCampaignPreviewLead {
-  row_index: number;
-  email: string;
-  first_name: string;
-  company: string;
-  steps: Record<string, string>[];
-  error: string | null;
-}
-
-export interface CsvCampaignPreview {
-  leads: CsvCampaignPreviewLead[];
-  valid_count: number;
-  skipped_count: number;
-}
-
-export interface CsvCampaign {
-  id: string;
-  name: string;
-  source_id: string;
-  source_filename: string;
-  email_column: string;
-  first_name_column: string | null;
-  company_column: string | null;
-  status_column: string | null;
-  inbox_ids: string[];
-  steps: SequenceStepInput[];
-  timezone: string;
-  total_leads: number;
-  emails_sent: number;
-  emails_scheduled: number;
-  follow_ups_scheduled: number;
-  failed_emails: number;
-  skipped_leads: number;
-  replies: number;
-  positive_replies: number;
-  status: "draft" | "scheduled" | "running" | "paused" | "stopped" | "completed";
-  created_at: string;
-  launched_at: string | null;
-}
-
-export interface CsvCampaignLaunchResponse {
-  campaign: CsvCampaign;
-  scheduled_count: number;
-  skipped_count: number;
-}
-
-export interface CampaignEditImpact { added: number; removed: number; rescheduled: number; unchanged: number; protected: number; skipped_leads: number; proposed_scheduled: number }
-export interface CampaignEditResult { campaign: CsvCampaign; impact: CampaignEditImpact }
-export interface TestEmailInboxResult { inbox_id: string; inbox_email: string; success: boolean; message_id: string | null; error: string | null }
-export interface TestEmailResponse { campaign_id: string; recipient_email: string; sent_count: number; failed_count: number; results: TestEmailInboxResult[] }
-
-export interface ScheduledEmail {
-  id: string;
-  campaign_id: string;
-  campaign_name: string;
-  source_id: string;
-  row_index: number;
-  recipient_email: string;
-  first_name: string;
-  company: string;
-  step_key: string;
-  step_label: string;
-  subject: string;
-  body: string;
-  inbox_id: string;
-  scheduled_at: string;
-  status: "scheduled" | "sending" | "sent" | "failed" | "skipped" | "cancelled";
-  error: string | null;
-  sent_at: string | null;
-  message_id: string | null;
-  thread_id: string | null;
-  replied_at: string | null;
-}
-
-export interface Recipient {
-  id: string;
-  name: string;
-  email: string;
-  company: string;
-  created_at: string;
-}
-
-export interface Template {
-  id: string;
-  name: string;
-  subject: string;
-  body: string;
-  created_at: string;
-}
-
-export interface Campaign {
-  id: string;
-  name: string;
-  inbox_id: string;
-  template_id: string;
-  recipient_ids: string[];
-  total_count: number;
-  sent_count: number;
-  failed_count: number;
-  status: "draft" | "queued" | "active" | "paused" | "completed";
-  min_gap_minutes: number;
-  max_gap_minutes: number;
-  next_send_at: string | null;
-  created_at: string;
-  launched_at: string | null;
-}
-
-export interface Activity {
-  id: string;
-  message: string;
-  detail: string;
-  time: string;
-  tone: "success" | "warning" | "error" | "neutral";
-}
-
-export interface Overview {
-  sent_today: number;
-  queued: number;
-  error_rate: number;
-  active_inboxes: number;
-  active_campaigns: number;
-  next_send_at: string | null;
-  next_send_in_minutes: number | null;
-  recent_activity: Activity[];
-}
-
-export interface HistoryEntry {
-  id: string;
-  campaign_name: string;
-  recipient_email: string;
-  inbox_email: string;
-  status: "sent" | "failed" | "waiting";
-  sent_at: string;
-}
-
-export interface LaunchResponse {
-  campaign: Campaign;
-  message: string;
-  is_mocked: boolean;
-}
+export interface Inbox { id:string; email:string; display_name:string; provider:"gmail"; status:"connected"|"paused"|"error"; connected_at:string; last_used_at:string|null; is_mocked:boolean; signature:string; daily_sending_limit:number; reply_tracking_status:"active"|"reconnect_required"|"unavailable"; sent_today:number; last_reply_sync_at:string|null }
+export interface UserPublic { id:string; email:string; name:string; role:string; created_at:string }
+export interface Metric { label:string; value:number; change:number|null }
+export interface ChartPoint { date:string; sends:number; replies:number; positive_replies:number }
+export interface CampaignPerformance { id:string; name:string; status:string; source:string; leads:number; sent:number; replies:number; positive_replies:number; reply_rate:number; progress:number; created_at:string }
+export interface CommandCenter { emails_sent:Metric; replies:Metric; positive_replies:Metric; active_campaigns:Metric; scheduled:number; failed:number; inboxes_needing_attention:number; chart:ChartPoint[]; campaigns:CampaignPerformance[] }
+export interface SearchResult { id:string; type:"campaign"|"lead"|"inbox"|"reply"; title:string; subtitle:string; href:string }
+export interface LeadSummary { id:string; name:string; email:string; company:string; campaign_id:string; campaign_name:string; status:string; last_activity:string|null; next_step:string|null; next_step_at:string|null; inbox_email:string; timezone:string; paused:boolean }
+export interface LeadPage { items:LeadSummary[]; total:number; page:number; page_size:number }
+export interface Reply { id:string; gmail_message_id:string; thread_id:string; inbox_id:string; inbox_email:string; campaign_id:string; campaign_name:string; recipient_email:string; sender_name:string; subject:string; snippet:string; received_at:string; sentiment:"unclassified"|"positive"|"neutral"|"negative"; read:boolean }
+export interface InboxHealth { id:string; email:string; display_name:string; status:string; reply_tracking_status:string; daily_limit:number; sent_today:number; utilization:number; health_score:number; health:"healthy"|"attention"|"disconnected"; failed_last_7_days:number; last_activity:string|null }
+export interface AnalyticsSummary { date_range_days:number; emails_sent:number; replies:number; positive_replies:number; failed:number; reply_rate:number; positive_reply_rate:number; bounce_rate:number; chart:ChartPoint[]; campaign_comparison:CampaignPerformance[]; inbox_performance:InboxHealth[] }
+export interface BillingConfiguration { provider:string; mode:string; credentials_configured:boolean; product_id_configured:boolean; configured_plan_ids:number; required_plan_ids:number; webhook_configured:boolean; checkout_enabled:boolean; webhook_url:string }
+export interface BillingPlan { key:string; name:string; monthly_price:number; annual_price:number; monthly_email_limit:number; inbox_limit:number; contact_limit:number; features:string[]; monthly_plan_id_configured:boolean; annual_plan_id_configured:boolean }
+export interface CsvSource { id:string; filename:string; columns:string[]; row_count:number; rows:Record<string,string>[]; uploaded_at:string }
+export interface CsvSourceSummary { id:string; filename:string; columns:string[]; row_count:number; uploaded_at:string }
+export interface SequenceStepInput { key:string; label:string; subject_column:string; body_column:string; day_offset:number; send_time:string }
+export interface CsvCampaignCreate { name:string; source_id:string; email_column:string; first_name_column:string|null; company_column:string|null; status_column:string|null; inbox_ids:string[]; steps:SequenceStepInput[]; timezone:string; min_gap_minutes:number; max_gap_minutes:number; sending_window_start:string; sending_window_end:string; sending_days:number[] }
+export interface CsvCampaignPreviewLead { row_index:number; email:string; first_name:string; company:string; steps:Record<string,string>[]; error:string|null }
+export interface CsvCampaignPreview { leads:CsvCampaignPreviewLead[]; valid_count:number; skipped_count:number }
+export interface CsvCampaign { id:string; name:string; source_id:string; source_filename:string; email_column:string; first_name_column:string|null; company_column:string|null; status_column:string|null; inbox_ids:string[]; steps:SequenceStepInput[]; timezone:string; min_gap_minutes:number; max_gap_minutes:number; sending_window_start:string; sending_window_end:string; sending_days:number[]; total_leads:number; emails_sent:number; emails_scheduled:number; follow_ups_scheduled:number; failed_emails:number; skipped_leads:number; replies:number; positive_replies:number; status:"draft"|"scheduled"|"running"|"paused"|"stopped"|"completed"; created_at:string; launched_at:string|null }
+export interface CsvCampaignLaunchResponse { campaign:CsvCampaign; scheduled_count:number; skipped_count:number }
+export interface CampaignEditImpact { added:number; removed:number; rescheduled:number; unchanged:number; protected:number; skipped_leads:number; proposed_scheduled:number }
+export interface CampaignEditResult { campaign:CsvCampaign; impact:CampaignEditImpact }
+export interface TestEmailInboxResult { inbox_id:string; inbox_email:string; success:boolean; message_id:string|null; error:string|null }
+export interface TestEmailResponse { campaign_id:string; recipient_email:string; sent_count:number; failed_count:number; results:TestEmailInboxResult[] }
+export interface ScheduledEmail { id:string; campaign_id:string; campaign_name:string; source_id:string; row_index:number; recipient_email:string; first_name:string; company:string; step_key:string; step_label:string; subject:string; body:string; inbox_id:string; scheduled_at:string; status:"scheduled"|"sending"|"sent"|"failed"|"skipped"|"cancelled"; error:string|null; sent_at:string|null; message_id:string|null; thread_id:string|null; replied_at:string|null }
+export interface Recipient { id:string; name:string; email:string; company:string; created_at:string }
+export interface Template { id:string; name:string; subject:string; body:string; created_at:string }
+export interface Campaign { id:string; name:string; inbox_id:string; template_id:string; recipient_ids:string[]; total_count:number; sent_count:number; failed_count:number; status:"draft"|"queued"|"active"|"paused"|"completed"; min_gap_minutes:number; max_gap_minutes:number; next_send_at:string|null; created_at:string; launched_at:string|null }
+export interface Activity { id:string; message:string; detail:string; time:string; tone:"success"|"warning"|"error"|"neutral" }
+export interface Overview { sent_today:number; queued:number; error_rate:number; active_inboxes:number; active_campaigns:number; next_send_at:string|null; next_send_in_minutes:number|null; recent_activity:Activity[] }
+export interface HistoryEntry { id:string; campaign_name:string; recipient_email:string; inbox_email:string; status:"sent"|"failed"|"waiting"; sent_at:string }
+export interface LaunchResponse { campaign:Campaign; message:string; is_mocked:boolean }
