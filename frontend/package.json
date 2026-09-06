@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "yarn install --frozen-lockfile --production=false && yarn vite build",
+    "build": "rm -rf node_modules && yarn install --force --production=false --ignore-scripts && yarn vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit"
