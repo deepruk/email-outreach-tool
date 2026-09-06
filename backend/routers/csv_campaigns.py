@@ -36,6 +36,34 @@ router = APIRouter(prefix="/csv", tags=["csv-campaigns"], dependencies=[Depends(
 def clean_row(row: dict[str | None, str | None], columns: list[str]) -> dict[str, str]:
     return {column: (row.get(column) or "") for column in columns}
 
+def get_source_row(source: CsvSource, row_index: int) -> dict[str, str]:
+    source_index = row_index - 2
+
+    if source_index < 0 or source_index >= len(source.rows):
+        raise HTTPException(
+            status_code=422,
+            detail=f"CSV row {row_index} no longer exists",
+        )
+
+    return source.rows[source_index]
+
+
+def get_source_recipient(
+    source: CsvSource,
+    row_index: int,
+    email_column: str,
+) -> str:
+    row = get_source_row(source, row_index)
+    email = (row.get(email_column) or "").strip()
+
+    if not email or "@" not in email:
+        raise HTTPException(
+            status_code=422,
+            detail=f"CSV row {row_index} has an invalid recipient email",
+        )
+
+    return email
+
 
 def validate_column(columns: list[str], column: str | None, label: str, required: bool = True) -> None:
     if required and not column:
@@ -533,49 +561,224 @@ async def process_due_sends() -> None:
     while True:
         try:
             now = datetime.now(timezone.utc)
+
             rows = await db.scheduled_emails.find(
-                {"status": "scheduled", "scheduled_at": {"$lte": now}}
+                {
+                    "status": "scheduled",
+                    "scheduled_at": {"$lte": now},
+                }
             ).sort("scheduled_at", 1).to_list(20)
+
+            source_cache: dict[str, CsvSource] = {}
+
             for row in rows:
-                campaign = await db.csv_campaigns.find_one({"id": row["campaign_id"], "status": "running", "edit_lock": {"$ne": True}})
+                campaign = await db.csv_campaigns.find_one(
+                    {
+                        "id": row["campaign_id"],
+                        "status": "running",
+                        "edit_lock": {"$ne": True},
+                    }
+                )
+
                 if not campaign:
                     continue
+
+                # Always resolve the recipient from the original CSV row.
+                # The CSV row is the source of truth, not the stored
+                # recipient_email inside the scheduled email document.
+                source_id = campaign["source_id"]
+
+                if source_id not in source_cache:
+                    source_row = await db.csv_sources.find_one(
+                        {"id": source_id}
+                    )
+
+                    if not source_row:
+                        await db.scheduled_emails.update_one(
+                            {"id": row["id"]},
+                            {
+                                "$set": {
+                                    "status": "failed",
+                                    "error": "CSV source no longer exists",
+                                }
+                            },
+                        )
+                        continue
+
+                    source_cache[source_id] = CsvSource(**source_row)
+
+                source = source_cache[source_id]
+
+                try:
+                    recipient_email = get_source_recipient(
+                        source,
+                        row["row_index"],
+                        campaign["email_column"],
+                    )
+
+                    source_row_data = get_source_row(
+                        source,
+                        row["row_index"],
+                    )
+
+                    # Keep the scheduled record synchronized with the
+                    # actual CSV row before sending.
+                    corrected_fields = {
+                        "recipient_email": recipient_email,
+                        "first_name": source_row_data.get(
+                            campaign.get("first_name_column") or "",
+                            "",
+                        ),
+                        "company": source_row_data.get(
+                            campaign.get("company_column") or "",
+                            "",
+                        ),
+                    }
+
+                    if (
+                        row.get("recipient_email") != recipient_email
+                        or row.get("first_name")
+                        != corrected_fields["first_name"]
+                        or row.get("company")
+                        != corrected_fields["company"]
+                    ):
+                        await db.scheduled_emails.update_one(
+                            {"id": row["id"]},
+                            {"$set": corrected_fields},
+                        )
+
+                        # Use the corrected values for this send.
+                        row = {
+                            **row,
+                            **corrected_fields,
+                        }
+
+                except Exception as exc:
+                    await db.scheduled_emails.update_one(
+                        {"id": row["id"]},
+                        {
+                            "$set": {
+                                "status": "failed",
+                                "error": str(exc)[:300],
+                            }
+                        },
+                    )
+
+                    await db.csv_campaigns.update_one(
+                        {"id": row["campaign_id"]},
+                        {"$inc": {"failed_emails": 1}},
+                    )
+                    continue
+
                 claimed = await db.scheduled_emails.find_one_and_update(
-                    {"id": row["id"], "status": "scheduled"}, {"$set": {"status": "sending"}}
+                    {
+                        "id": row["id"],
+                        "status": "scheduled",
+                    },
+                    {
+                        "$set": {
+                            "status": "sending",
+                        }
+                    },
                 )
+
                 if not claimed:
                     continue
-                inbox = await db.inboxes.find_one({"id": row["inbox_id"], "status": "connected"})
+
+                inbox = await db.inboxes.find_one(
+                    {
+                        "id": row["inbox_id"],
+                        "status": "connected",
+                    }
+                )
+
                 if not inbox or inbox.get("is_mocked", True):
                     await db.scheduled_emails.update_one(
                         {"id": row["id"]},
-                        {"$set": {"status": "failed", "error": "Sending inbox is not connected through Gmail OAuth"}},
+                        {
+                            "$set": {
+                                "status": "failed",
+                                "error": (
+                                    "Sending inbox is not connected "
+                                    "through Gmail OAuth"
+                                ),
+                            }
+                        },
                     )
-                    await db.csv_campaigns.update_one({"id": row["campaign_id"]}, {"$inc": {"failed_emails": 1}})
+
+                    await db.csv_campaigns.update_one(
+                        {"id": row["campaign_id"]},
+                        {"$inc": {"failed_emails": 1}},
+                    )
                     continue
+
                 try:
                     send_result = await send_gmail_message(
-                        row["inbox_id"], row["recipient_email"], row["subject"], row["body"]
+                        row["inbox_id"],
+                        recipient_email,
+                        row["subject"],
+                        row["body"],
                     )
+
                     await db.scheduled_emails.update_one(
                         {"id": row["id"]},
-                        {"$set": {"status": "sent", "sent_at": now, **send_result}},
+                        {
+                            "$set": {
+                                "status": "sent",
+                                "sent_at": now,
+                                "recipient_email": recipient_email,
+                                **send_result,
+                            }
+                        },
                     )
+
                     await db.csv_campaigns.update_one(
-                        {"id": row["campaign_id"]}, {"$inc": {"emails_sent": 1, "emails_scheduled": -1}}
+                        {"id": row["campaign_id"]},
+                        {
+                            "$inc": {
+                                "emails_sent": 1,
+                                "emails_scheduled": -1,
+                            }
+                        },
                     )
+
                 except Exception as exc:
                     await db.scheduled_emails.update_one(
-                        {"id": row["id"]}, {"$set": {"status": "failed", "error": str(exc)[:300]}}
+                        {"id": row["id"]},
+                        {
+                            "$set": {
+                                "status": "failed",
+                                "error": str(exc)[:300],
+                            }
+                        },
                     )
-                    await db.csv_campaigns.update_one({"id": row["campaign_id"]}, {"$inc": {"failed_emails": 1}})
+
+                    await db.csv_campaigns.update_one(
+                        {"id": row["campaign_id"]},
+                        {"$inc": {"failed_emails": 1}},
+                    )
+
                 remaining = await db.scheduled_emails.count_documents(
-                    {"campaign_id": row["campaign_id"], "status": {"$in": ["scheduled", "sending"]}}
+                    {
+                        "campaign_id": row["campaign_id"],
+                        "status": {"$in": ["scheduled", "sending"]},
+                    }
                 )
+
                 if remaining == 0:
                     await db.csv_campaigns.update_one(
-                        {"id": row["campaign_id"], "status": "running"}, {"$set": {"status": "completed"}}
+                        {
+                            "id": row["campaign_id"],
+                            "status": "running",
+                        },
+                        {
+                            "$set": {
+                                "status": "completed",
+                            }
+                        },
                     )
+
         except Exception:
             pass
+
         await asyncio.sleep(30)
