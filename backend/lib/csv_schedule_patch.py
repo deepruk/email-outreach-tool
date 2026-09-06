@@ -33,30 +33,10 @@ def _move(value: datetime, start: time, end: time, zone: ZoneInfo, days: set[int
     raise HTTPException(status_code=422, detail="At least one working day must be enabled")
 
 
-async def _campaign_schedule_values(campaign_id: str, input: CsvCampaignCreate) -> CsvCampaignCreate:
-    campaign = await db.csv_campaigns.find_one({"id": campaign_id})
-    if not campaign:
-        return input
-    if (
-        input.sending_window_start == "09:00"
-        and input.sending_window_end == "18:00"
-        and input.sending_days == [0, 1, 2, 3, 4]
-    ):
-        data = input.model_dump()
-        data["sending_window_start"] = campaign.get("sending_window_start", "09:00")
-        data["sending_window_end"] = campaign.get("sending_window_end", "18:00")
-        data["sending_days"] = campaign.get("sending_days", [0, 1, 2, 3, 4])
-        data["min_gap_minutes"] = campaign.get("min_gap_minutes", input.min_gap_minutes)
-        data["max_gap_minutes"] = campaign.get("max_gap_minutes", input.max_gap_minutes)
-        return CsvCampaignCreate(**data)
-    return input
-
-
 _original_build = csv.build_edit_schedule
 
 
 async def build_edit_schedule_with_window(campaign_id: str, input: CsvCampaignCreate):
-    input = await _campaign_schedule_values(campaign_id, input)
     scheduled, skipped = await _original_build(campaign_id, input)
     zone = ZoneInfo(input.timezone)
     start = _clock(input.sending_window_start, "working-hours start")
