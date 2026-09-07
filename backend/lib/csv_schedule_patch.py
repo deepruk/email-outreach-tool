@@ -56,25 +56,47 @@ async def build_edit_schedule_with_window(campaign_id: str, input: CsvCampaignCr
         row = await db.inboxes.find_one({"id": inbox_id})
         inbox_limits[inbox_id] = int((row or {}).get("daily_sending_limit", 100))
 
-    min_gap = timedelta(minutes=input.min_gap_minutes)
+    # Enforce the configured random gap between every consecutive email from
+    # the same inbox. The previous implementation only enforced a minimum
+    # gap when a collision already existed, which allowed emails with the
+    # same base send time to be scheduled only 1-2 minutes apart.
     for inbox_id, items in by_inbox.items():
         items.sort(key=lambda item: item.scheduled_at)
-        last_by_day = {}
+        daily_count: dict[str, int] = {}
+        previous: datetime | None = None
+
         for item in items:
             local = _move(item.scheduled_at, start, end, zone, days)
+
+            if previous is not None:
+                previous_local = previous.astimezone(zone)
+                if local.date() == previous_local.date():
+                    gap_seed = f"{campaign_id}:{inbox_id}:{item.step_key}:{item.row_index}"
+                    gap_minutes = __import__("random").Random(gap_seed).randint(
+                        input.min_gap_minutes,
+                        input.max_gap_minutes,
+                    )
+                    earliest = previous + timedelta(minutes=gap_minutes)
+                    if local < earliest:
+                        local = _move(earliest, start, end, zone, days)
+
+            # A window/day move can cross into another day, so re-check the
+            # daily limit after the final scheduling position is known.
             while True:
                 day_key = local.date().isoformat()
-                count = last_by_day.get(day_key, 0)
-                previous = last_by_day.get(("last", inbox_id))
-                if previous is not None and local - previous < min_gap:
-                    local = _move(previous + min_gap, start, end, zone, days)
-                    continue
-                if count >= inbox_limits[inbox_id]:
-                    local = _move(datetime.combine(local.date() + timedelta(days=1), start, zone), start, end, zone, days)
-                    continue
-                break
-            last_by_day[day_key] = count + 1
-            last_by_day[("last", inbox_id)] = local
+                count = daily_count.get(day_key, 0)
+                if count < inbox_limits[inbox_id]:
+                    break
+                local = _move(
+                    datetime.combine(local.date() + timedelta(days=1), start, zone),
+                    start,
+                    end,
+                    zone,
+                    days,
+                )
+
+            daily_count[local.date().isoformat()] = daily_count.get(local.date().isoformat(), 0) + 1
+            previous = local
             item.scheduled_at = local.astimezone(timezone.utc)
 
     return scheduled, skipped
