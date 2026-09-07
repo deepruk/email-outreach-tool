@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 from routers.scheduler import oauth_router, router as scheduler_router
 from routers.csv_campaigns import process_due_sends, router as csv_campaigns_router
+from routers.rohly_campaigns import process_template_campaigns, router as rohly_campaigns_router
 from routers.auth import ensure_owner, router as auth_router
 from routers.product import process_reply_sync, router as product_router
 from routers.billing import router as billing_router
@@ -22,30 +23,26 @@ from lib import csv_schedule_patch
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 from lib.db import client, db
 
 
-# Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await ensure_owner()
     sender_task = asyncio.create_task(process_due_sends())
+    rohly_sender_task = asyncio.create_task(process_template_campaigns())
     reply_task = asyncio.create_task(process_reply_sync())
     yield
     sender_task.cancel()
+    rohly_sender_task.cancel()
     reply_task.cancel()
     client.close()
 
 
-# Create the main app without a prefix
 app = FastAPI(lifespan=lifespan)
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
 class StatusCheck(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
@@ -54,7 +51,7 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
-# Add your routes to the router instead of directly to app
+
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
@@ -79,21 +76,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Resource routers are folded into the /api router before it is mounted.
 api_router.include_router(scheduler_router)
 api_router.include_router(oauth_router)
 api_router.include_router(csv_campaigns_router)
+api_router.include_router(rohly_campaigns_router)
 api_router.include_router(open_tracking_router)
 api_router.include_router(auth_router)
 api_router.include_router(product_router)
 api_router.include_router(billing_router)
 
-# Include the router in the main app last so every endpoint is served under /api.
 app.include_router(api_router)
