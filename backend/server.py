@@ -15,6 +15,7 @@ from routers.csv_campaigns import process_due_sends, router as csv_campaigns_rou
 from routers.auth import ensure_owner, router as auth_router
 from routers.product import process_reply_sync, router as product_router
 from routers.billing import router as billing_router
+from routers.open_tracking import router as open_tracking_router
 from lib import csv_schedule_patch
 
 
@@ -89,6 +90,7 @@ logger = logging.getLogger(__name__)
 api_router.include_router(scheduler_router)
 api_router.include_router(oauth_router)
 api_router.include_router(csv_campaigns_router)
+api_router.include_router(open_tracking_router)
 api_router.include_router(auth_router)
 api_router.include_router(product_router)
 api_router.include_router(billing_router)
