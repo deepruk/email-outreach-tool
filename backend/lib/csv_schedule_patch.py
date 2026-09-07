@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 from models.csv_campaign import CsvCampaign, CsvCampaignCreate, CsvCampaignLaunchResponse
 from routers import csv_campaigns as csv
@@ -57,9 +57,8 @@ async def build_edit_schedule_with_window(campaign_id: str, input: CsvCampaignCr
         inbox_limits[inbox_id] = int((row or {}).get("daily_sending_limit", 100))
 
     # Enforce the configured random gap between every consecutive email from
-    # the same inbox. The previous implementation only enforced a minimum
-    # gap when a collision already existed, which allowed emails with the
-    # same base send time to be scheduled only 1-2 minutes apart.
+    # the same inbox. This prevents emails from being scheduled 1-2 minutes
+    # apart when their base sequence times are identical.
     for inbox_id, items in by_inbox.items():
         items.sort(key=lambda item: item.scheduled_at)
         daily_count: dict[str, int] = {}
@@ -69,19 +68,15 @@ async def build_edit_schedule_with_window(campaign_id: str, input: CsvCampaignCr
             local = _move(item.scheduled_at, start, end, zone, days)
 
             if previous is not None:
-                previous_local = previous.astimezone(zone)
-                if local.date() == previous_local.date():
-                    gap_seed = f"{campaign_id}:{inbox_id}:{item.step_key}:{item.row_index}"
-                    gap_minutes = __import__("random").Random(gap_seed).randint(
-                        input.min_gap_minutes,
-                        input.max_gap_minutes,
-                    )
-                    earliest = previous + timedelta(minutes=gap_minutes)
-                    if local < earliest:
-                        local = _move(earliest, start, end, zone, days)
+                gap_seed = f"{campaign_id}:{inbox_id}:{item.step_key}:{item.row_index}"
+                gap_minutes = __import__("random").Random(gap_seed).randint(
+                    input.min_gap_minutes,
+                    input.max_gap_minutes,
+                )
+                earliest = previous + timedelta(minutes=gap_minutes)
+                if local < earliest:
+                    local = _move(earliest, start, end, zone, days)
 
-            # A window/day move can cross into another day, so re-check the
-            # daily limit after the final scheduling position is known.
             while True:
                 day_key = local.date().isoformat()
                 count = daily_count.get(day_key, 0)
@@ -151,3 +146,24 @@ csv.launch_campaign = launch_campaign_with_saved_schedule
 for route in csv.router.routes:
     if getattr(route, "path", None) == "/campaigns/{campaign_id}/launch" and "POST" in getattr(route, "methods", set()):
         route.endpoint = launch_campaign_with_saved_schedule
+
+
+async def delete_campaign(campaign_id: str) -> Response:
+    campaign = await db.csv_campaigns.find_one({"id": campaign_id})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="CSV campaign not found")
+    if campaign.get("status") == "running":
+        raise HTTPException(status_code=409, detail="Pause or stop the campaign before deleting it")
+
+    await db.scheduled_emails.delete_many({"campaign_id": campaign_id})
+    await db.csv_campaigns.delete_one({"id": campaign_id})
+    return Response(status_code=204)
+
+
+csv.router.add_api_route(
+    "/campaigns/{campaign_id}",
+    delete_campaign,
+    methods=["DELETE"],
+    status_code=204,
+    response_class=Response,
+)
