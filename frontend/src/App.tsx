@@ -13,7 +13,7 @@ import Imports from "@/pages/rohly/Imports";
 import SettingsPage from "@/pages/rohly/Settings";
 import CampaignDetail from "@/pages/rohly/CampaignDetail";
 import CampaignSource from "@/pages/rohly/CampaignSource";
-import TemplateBuilder from "@/pages/rohly/TemplateBuilder";
+import TemplateBuilder from "@/pages/rohly/TemplateBuilderSafe";
 import Billing from "@/pages/rohly/Billing";
 import CampaignEditor from "@/pages/rohly/CampaignEditor";
 
