@@ -461,7 +461,7 @@ async def edit_campaign(campaign_id: str, input: CsvCampaignCreate, user: UserPu
     await db.csv_campaigns.update_one({"id": campaign_id}, {"$set": {"edit_lock": True}})
     try:
         proposed, skipped = await build_edit_schedule(campaign_id, input, user)
-        impact = await calculate_edit_impact(campaign_id, proposed, skipped)
+        impact = await calculate_edit_impact(campaign_id, proposed, skipped, user)
         protected = await db.scheduled_emails.find({
             "campaign_id": campaign_id,
             "$or": [{"status": {"$in": ["sent", "failed"]}}, {"replied_at": {"$ne": None}}],
