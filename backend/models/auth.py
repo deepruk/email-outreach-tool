@@ -10,6 +10,7 @@ class UserPublic(BaseModel):
     name: str
     role: str = "owner"
     created_at: datetime
+    email_verified: bool = False
 
 
 class UserRecord(UserPublic):
@@ -29,6 +30,14 @@ class SignupRequest(BaseModel):
 
 class ProfileUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=500)
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
 
 
 class PasswordUpdate(BaseModel):
