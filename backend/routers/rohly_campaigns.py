@@ -364,7 +364,7 @@ async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(requ
 
         inbox_ids = list(dict.fromkeys(input.inbox_ids))
         recipient_ids = list(dict.fromkeys(input.recipient_ids))
-        template_ids = [step.template_id for step in input.steps]
+        template_ids = list(dict.fromkeys([template_id for step in input.steps for template_id in [step.template_id, *step.variant_template_ids]]))
 
         try:
             inboxes = await db.inboxes.find({"id": {"$in": inbox_ids}, "status": "connected", "user_id": user.id}).to_list(1000)
@@ -415,6 +415,20 @@ async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(requ
             "stop_on_reply": input.stop_on_reply,
             "follow_up_priority": input.follow_up_priority,
             "distribution_mode": input.distribution_mode,
+            "open_tracking": input.open_tracking,
+            "click_tracking": input.click_tracking,
+            "unsubscribe_enabled": input.unsubscribe_enabled,
+            "stop_on_open": input.stop_on_open,
+            "stop_on_click": input.stop_on_click,
+            "bounce_auto_pause_rate": input.bounce_auto_pause_rate,
+            "webhook_url": input.webhook_url,
+            "webhook_events": input.webhook_events,
+            "unique_opens": 0,
+            "total_opens": 0,
+            "unique_clicks": 0,
+            "total_clicks": 0,
+            "bounces": 0,
+            "unsubscribes": 0,
             "next_send_at": None,
             "created_at": datetime.now(timezone.utc),
             "launched_at": None,
