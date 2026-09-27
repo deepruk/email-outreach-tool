@@ -308,7 +308,7 @@ async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(requ
         template_ids = [step.template_id for step in input.steps]
 
         try:
-            inboxes = await db.inboxes.find({"id": {"$in": inbox_ids}, "status": "connected"}).to_list(1000)
+            inboxes = await db.inboxes.find({"id": {"$in": inbox_ids}, "status": "connected", "user_id": user.id}).to_list(1000)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Could not read sending inboxes: {str(exc)[:300]}") from exc
         if len(inboxes) != len(inbox_ids):
@@ -324,7 +324,7 @@ async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(requ
             raise HTTPException(status_code=404, detail=f"One or more recipients were not found: {', '.join(missing[:3])}")
 
         try:
-            templates = await db.templates.find({"id": {"$in": template_ids}}).to_list(1000)
+            templates = await db.templates.find({"id": {"$in": template_ids}, "user_id": user.id}).to_list(1000)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Could not read sequence templates: {str(exc)[:300]}") from exc
         found = {row.get("id") for row in templates}
@@ -388,7 +388,7 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
         raise HTTPException(status_code=404, detail="Rohly campaign not found")
     if campaign.get("status") in {"active", "completed"}:
         raise HTTPException(status_code=409, detail="Campaign is already launched")
-    recipients = await db.recipients.find({"id": {"$in": campaign["recipient_ids"]}}).to_list(5000)
+    recipients = await db.recipients.find({"id": {"$in": campaign["recipient_ids"]}, "user_id": user.id}).to_list(5000)
     if len(recipients) != len(set(campaign["recipient_ids"])):
         raise HTTPException(status_code=409, detail="One or more selected recipients no longer exist")
 
@@ -401,6 +401,8 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
 
     await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id})
     if events:
+        for event in events:
+            event["user_id"] = user.id
         try:
             await db.scheduled_emails.insert_many(events)
         except Exception as exc:
