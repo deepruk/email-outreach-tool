@@ -39,6 +39,9 @@ class CampaignCreate(BaseModel):
     sending_window_start: str = "09:00"
     sending_window_end: str = "18:00"
     sending_days: list[int] = [0, 1, 2, 3, 4]
+    stop_on_reply: bool = True
+    follow_up_priority: int = Field(default=100, ge=0, le=100)
+    distribution_mode: str = "pattern"
 
 
 def _clock(value: str) -> tuple[int, int]:
@@ -81,7 +84,7 @@ def _personalize(value: str, recipient: dict) -> str:
     return re.sub(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", lambda match: str(values.get(match.group(1).lower(), "")), value or "")
 
 
-def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict], inbox_ids: list[str], steps: list[dict], timezone_name: str, min_gap: int, max_gap: int, window_start: str, window_end: str, sending_days: list[int]) -> list[dict]:
+def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict], inbox_ids: list[str], steps: list[dict], timezone_name: str, min_gap: int, max_gap: int, window_start: str, window_end: str, sending_days: list[int], distribution_mode: str) -> list[dict]:
     tz = ZoneInfo(timezone_name)
     start = _clock(window_start)
     end = _clock(window_end)
@@ -90,11 +93,16 @@ def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict
         raise HTTPException(status_code=422, detail="Working-hours start must be before end")
     if not days:
         raise HTTPException(status_code=422, detail="Select at least one working day")
+    if distribution_mode not in {"pattern", "random"}:
+        raise HTTPException(status_code=422, detail="Distribution mode must be pattern or random")
     now = datetime.now(timezone.utc).astimezone(tz)
     next_initial = {inbox_id: _working(now, days, start, end) for inbox_id in inbox_ids}
     events: list[dict] = []
     for index, recipient in enumerate(recipients):
-        inbox_id = inbox_ids[index % len(inbox_ids)]
+        if distribution_mode == "random":
+            inbox_id = random.Random(f"{campaign_id}:{recipient['id']}:inbox").choice(inbox_ids)
+        else:
+            inbox_id = inbox_ids[index % len(inbox_ids)]
         first = next_initial[inbox_id] + timedelta(minutes=random.Random(f"{campaign_id}:{recipient['id']}:initial").randint(min_gap, max_gap))
         first = _working(first, days, start, end)
         next_initial[inbox_id] = first
@@ -241,6 +249,9 @@ async def create_campaign(input: CampaignCreate) -> dict:
         "sending_window_end": input.sending_window_end,
         "sending_days": input.sending_days,
         "timezone": input.timezone,
+        "stop_on_reply": input.stop_on_reply,
+        "follow_up_priority": input.follow_up_priority,
+        "distribution_mode": input.distribution_mode,
         "next_send_at": None,
         "created_at": datetime.now(timezone.utc),
         "launched_at": None,
@@ -264,7 +275,7 @@ async def launch_campaign(campaign_id: str) -> dict:
         raise HTTPException(status_code=409, detail="One or more selected recipients no longer exist")
 
     try:
-        events = _schedule_events(campaign["id"], campaign["name"], recipients, campaign["inbox_ids"], campaign["steps"], campaign.get("timezone", "Asia/Kolkata"), campaign["min_gap_minutes"], campaign["max_gap_minutes"], campaign.get("sending_window_start", "09:00"), campaign.get("sending_window_end", "18:00"), campaign.get("sending_days", [0, 1, 2, 3, 4]))
+        events = _schedule_events(campaign["id"], campaign["name"], recipients, campaign["inbox_ids"], campaign["steps"], campaign.get("timezone", "Asia/Kolkata"), campaign["min_gap_minutes"], campaign["max_gap_minutes"], campaign.get("sending_window_start", "09:00"), campaign.get("sending_window_end", "18:00"), campaign.get("sending_days", [0, 1, 2, 3, 4]), campaign.get("distribution_mode", "pattern"))
     except HTTPException:
         raise
     except Exception as exc:
@@ -297,7 +308,20 @@ async def delete_campaign(campaign_id: str):
 async def process_template_campaigns() -> None:
     while True:
         try:
-            due = await db.scheduled_emails.find({"source_type": "rohly_template", "status": "scheduled", "scheduled_at": {"$lte": datetime.now(timezone.utc)}}).sort("scheduled_at", 1).to_list(25)
+            due = await db.scheduled_emails.find({"source_type": "rohly_template", "status": "scheduled", "scheduled_at": {"$lte": datetime.now(timezone.utc)}}).sort("scheduled_at", 1).to_list(100)
+            campaign_cache: dict[str, dict] = {}
+            for item in due:
+                campaign = campaign_cache.get(item["campaign_id"])
+                if campaign is None:
+                    campaign = await db.campaigns.find_one({"id": item["campaign_id"], "campaign_type": "rohly_template"})
+                    campaign_cache[item["campaign_id"]] = campaign or {}
+            def priority_key(item: dict) -> tuple:
+                campaign = campaign_cache.get(item["campaign_id"], {})
+                priority = int(campaign.get("follow_up_priority", 100))
+                is_follow_up = int(item.get("step_index", 0) > 0)
+                follow_rank = 0 if (is_follow_up and priority > 0) else 1
+                return (item.get("scheduled_at"), follow_rank if priority >= 50 else (1 - follow_rank))
+            due.sort(key=priority_key)
             for item in due:
                 claimed = await db.scheduled_emails.update_one({"id": item["id"], "status": "scheduled"}, {"$set": {"status": "sending"}})
                 if claimed.modified_count != 1:
@@ -312,6 +336,27 @@ async def process_template_campaigns() -> None:
                 if not recipient or not template or not inbox:
                     await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "failed", "error": "Recipient, template, or inbox no longer exists"}})
                     continue
+                if item.get("step_index", 0) > 0 and campaign.get("stop_on_reply", True):
+                    replied = await db.replies.find_one({
+                        "campaign_id": item["campaign_id"],
+                        "recipient_email": recipient["email"],
+                    })
+                    if replied:
+                        await db.scheduled_emails.update_one(
+                            {"id": item["id"]},
+                            {"$set": {"status": "cancelled", "error": "Cancelled because the lead replied"}},
+                        )
+                        await db.scheduled_emails.update_many(
+                            {
+                                "campaign_id": item["campaign_id"],
+                                "recipient_id": item["recipient_id"],
+                                "source_type": "rohly_template",
+                                "status": "scheduled",
+                                "step_index": {"$gt": item.get("step_index", 0)},
+                            },
+                            {"$set": {"status": "cancelled", "error": "Cancelled because the lead replied"}},
+                        )
+                        continue
                 subject = _personalize(template.get("subject", ""), recipient)
                 body = _personalize(template.get("body", ""), recipient)
                 try:
