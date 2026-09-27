@@ -646,7 +646,7 @@ function SettingsStep(props: {
             <div key={label} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-xs font-semibold ${index === 0 ? "bg-violet-50 text-violet-600" : "text-slate-500"}`}>
               <Icon size={14} />{label}
             </div>
-          ))})}
+          ))}
         </div>
 
         <div className="space-y-4">
