@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.db import db
 from models.scheduler import Recipient
 from routers.auth import require_user
+from models.auth import UserPublic
 
 router = APIRouter(prefix="/workspace/rohly-campaign-lists", tags=["rohly-campaign-lists"], dependencies=[Depends(require_user)])
 
@@ -35,8 +36,8 @@ def _row_value(row: dict, column: str | None) -> str:
 
 
 @router.get("")
-async def list_recipient_lists() -> list[dict]:
-    rows = await db.csv_sources.find({}, {"rows": 0}).sort("uploaded_at", -1).to_list(100)
+async def list_recipient_lists(user: UserPublic = Depends(require_user)) -> list[dict]:
+    rows = await db.csv_sources.find({"user_id": user.id}, {"rows": 0}).sort("uploaded_at", -1).to_list(100)
     return [
         {
             "id": row["id"],
@@ -50,8 +51,8 @@ async def list_recipient_lists() -> list[dict]:
 
 
 @router.post("/{source_id}/use")
-async def use_recipient_list(source_id: str) -> dict:
-    row = await db.csv_sources.find_one({"id": source_id})
+async def use_recipient_list(source_id: str, user: UserPublic = Depends(require_user)) -> dict:
+    row = await db.csv_sources.find_one({"id": source_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="Recipient list not found")
 
@@ -72,7 +73,7 @@ async def use_recipient_list(source_id: str) -> dict:
     now = datetime.now(timezone.utc)
     seen: set[str] = set()
 
-    existing_rows = await db.recipients.find({}, {"email": 1, "_id": 0}).to_list(100000)
+    existing_rows = await db.recipients.find({"user_id": user.id}, {"email": 1, "_id": 0}).to_list(100000)
     existing_emails = {
         str(item.get("email") or "").strip().lower()
         for item in existing_rows
@@ -127,9 +128,10 @@ async def use_recipient_list(source_id: str) -> dict:
             "city": _row_value(source_row, city_column),
             "country": _row_value(source_row, country_column),
             "created_at": now,
+            "user_id": user.id,
         }
         recipient = Recipient(**recipient_data)
-        await db.recipients.update_one({"id": recipient_id}, {"$set": recipient.model_dump()}, upsert=True)
+        await db.recipients.update_one({"id": recipient_id, "user_id": user.id}, {"$set": {**recipient.model_dump(), "user_id": user.id}}, upsert=True)
         recipient_ids.append(recipient_id)
 
     if not recipient_ids:
