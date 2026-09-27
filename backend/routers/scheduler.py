@@ -20,6 +20,7 @@ from models.scheduler import (
     Activity,
     Campaign,
     CampaignCreate,
+    UserPublic,
     HistoryEntry,
     Inbox,
     InboxConnectRequest,
@@ -231,17 +232,18 @@ async def latest_activity(limit: int = 6) -> list[Activity]:
 
 
 @router.get("/dashboard", response_model=Overview)
-async def get_dashboard() -> Overview:
-    campaigns = await db.campaigns.find().to_list(1000)
-    inboxes = await db.inboxes.count_documents({"status": "connected"})
-    sent_today = await db.history.count_documents({"status": "sent"})
+async def get_dashboard(user: UserPublic = Depends(require_user)) -> Overview:
+    scope = {"user_id": user.id}
+    campaigns = await db.campaigns.find(scope).to_list(1000)
+    inboxes = await db.inboxes.count_documents({**scope, "status": "connected"})
+    sent_today = await db.history.count_documents({**scope, "status": "sent"})
     queued = sum(
         max(0, int(row.get("total_count", 0)) - int(row.get("sent_count", 0)))
         for row in campaigns
         if row.get("status") in {"queued", "active", "paused"}
     )
-    failures = await db.history.count_documents({"status": "failed"})
-    total_history = await db.history.count_documents({})
+    failures = await db.history.count_documents({**scope, "status": "failed"})
+    total_history = await db.history.count_documents(scope)
     next_dates = [
         normalise_datetime(row.get("next_send_at"))
         for row in campaigns
@@ -265,21 +267,21 @@ async def get_dashboard() -> Overview:
 
 
 @router.get("/inboxes", response_model=list[Inbox])
-async def list_inboxes() -> list[Inbox]:
-    rows = await db.inboxes.find().sort("connected_at", -1).to_list(1000)
+async def list_inboxes(user: UserPublic = Depends(require_user)) -> list[Inbox]:
+    rows = await db.inboxes.find({"user_id": user.id}).sort("connected_at", -1).to_list(1000)
     today = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
     result = []
     for row in rows:
         sent_today = await db.scheduled_emails.count_documents(
-            {"inbox_id": row["id"], "status": "sent", "sent_at": {"$gte": today}}
+            {"user_id": user.id, "inbox_id": row["id"], "status": "sent", "sent_at": {"$gte": today}}
         )
         result.append(Inbox(**{**row, "sent_today": sent_today}))
     return result
 
 
 @router.post("/inboxes/connect", response_model=Inbox)
-async def connect_inbox(input: InboxConnectRequest) -> Inbox:
-    existing = await db.inboxes.find_one({"email": input.email})
+async def connect_inbox(input: InboxConnectRequest, user: UserPublic = Depends(require_user)) -> Inbox:
+    existing = await db.inboxes.find_one({"email": input.email, "user_id": user.id})
     if existing:
         return Inbox(**existing)
     inbox = Inbox(
@@ -288,7 +290,7 @@ async def connect_inbox(input: InboxConnectRequest) -> Inbox:
         signature=input.signature,
         daily_sending_limit=input.daily_sending_limit,
     )
-    await db.inboxes.insert_one(inbox.model_dump())
+    await db.inboxes.insert_one({**inbox.model_dump(), "user_id": user.id})
     await db.activities.insert_one(
         Activity(
             message="Inbox connected",
@@ -323,15 +325,15 @@ async def update_inbox(inbox_id: str, input: InboxUpdate) -> Inbox:
 
 
 @router.get("/recipients", response_model=list[Recipient])
-async def list_recipients() -> list[Recipient]:
-    rows = await db.recipients.find().sort("created_at", -1).to_list(1000)
+async def list_recipients(user: UserPublic = Depends(require_user)) -> list[Recipient]:
+    rows = await db.recipients.find({"user_id": user.id}).sort("created_at", -1).to_list(1000)
     return [Recipient(**row) for row in rows]
 
 
 @router.post("/recipients", response_model=Recipient)
-async def create_recipient(input: RecipientCreate) -> Recipient:
+async def create_recipient(input: RecipientCreate, user: UserPublic = Depends(require_user)) -> Recipient:
     recipient = Recipient(**input.model_dump())
-    await db.recipients.insert_one(recipient.model_dump())
+    await db.recipients.insert_one({**recipient.model_dump(), "user_id": user.id})
     return recipient
 
 
@@ -348,15 +350,15 @@ async def delete_recipient(recipient_id: str) -> Response:
 
 
 @router.get("/templates", response_model=list[Template])
-async def list_templates() -> list[Template]:
-    rows = await db.templates.find().sort("created_at", -1).to_list(1000)
+async def list_templates(user: UserPublic = Depends(require_user)) -> list[Template]:
+    rows = await db.templates.find({"user_id": user.id}).sort("created_at", -1).to_list(1000)
     return [Template(**row) for row in rows]
 
 
 @router.post("/templates", response_model=Template)
-async def create_template(input: TemplateCreate) -> Template:
+async def create_template(input: TemplateCreate, user: UserPublic = Depends(require_user)) -> Template:
     template = Template(**input.model_dump())
-    await db.templates.insert_one(template.model_dump())
+    await db.templates.insert_one({**template.model_dump(), "user_id": user.id})
     return template
 
 
@@ -373,22 +375,22 @@ async def delete_template(template_id: str) -> Response:
 
 
 @router.get("/campaigns", response_model=list[Campaign])
-async def list_campaigns() -> list[Campaign]:
-    rows = await db.campaigns.find().sort("created_at", -1).to_list(1000)
+async def list_campaigns(user: UserPublic = Depends(require_user)) -> list[Campaign]:
+    rows = await db.campaigns.find({"user_id": user.id}).sort("created_at", -1).to_list(1000)
     return [Campaign(**row) for row in rows]
 
 
 @router.post("/campaigns", response_model=Campaign)
-async def create_campaign(input: CampaignCreate) -> Campaign:
+async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(require_user)) -> Campaign:
     if input.min_gap_minutes > input.max_gap_minutes:
         raise HTTPException(status_code=422, detail="Minimum gap must be less than maximum gap")
-    inbox = await db.inboxes.find_one({"id": input.inbox_id, "status": "connected"})
+    inbox = await db.inboxes.find_one({"id": input.inbox_id, "status": "connected", "user_id": user.id})
     if not inbox:
         raise HTTPException(status_code=404, detail="Connected inbox not found")
-    template = await db.templates.find_one({"id": input.template_id})
+    template = await db.templates.find_one({"id": input.template_id, "user_id": user.id})
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    recipient_count = await db.recipients.count_documents({"id": {"$in": input.recipient_ids}})
+    recipient_count = await db.recipients.count_documents({"id": {"$in": input.recipient_ids}, "user_id": user.id})
     if recipient_count != len(input.recipient_ids):
         raise HTTPException(status_code=404, detail="One or more recipients not found")
     campaign = Campaign(
@@ -396,13 +398,13 @@ async def create_campaign(input: CampaignCreate) -> Campaign:
         total_count=len(input.recipient_ids),
         status="queued",
     )
-    await db.campaigns.insert_one(campaign.model_dump())
+    await db.campaigns.insert_one({**campaign.model_dump(), "user_id": user.id})
     return campaign
 
 
 @router.delete("/campaigns/{campaign_id}", status_code=204)
-async def delete_campaign(campaign_id: str) -> Response:
-    campaign = await db.campaigns.find_one({"id": campaign_id})
+async def delete_campaign(campaign_id: str, user: UserPublic = Depends(require_user)) -> Response:
+    campaign = await db.campaigns.find_one({"id": campaign_id, "user_id": user.id})
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.get("status") == "active":
@@ -412,8 +414,8 @@ async def delete_campaign(campaign_id: str) -> Response:
 
 
 @router.post("/campaigns/{campaign_id}/launch", response_model=LaunchResponse)
-async def launch_campaign(campaign_id: str) -> LaunchResponse:
-    row = await db.campaigns.find_one({"id": campaign_id})
+async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_user)) -> LaunchResponse:
+    row = await db.campaigns.find_one({"id": campaign_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="Campaign not found")
     campaign = Campaign(**row)
