@@ -23,6 +23,7 @@ class Step(BaseModel):
     label: str = "Initial email"
     delay_days: int = Field(default=0, ge=0, le=365)
     variant_template_ids: list[str] = []
+    condition: str = "always"
 
 
 class TestRunRequest(BaseModel):
@@ -158,6 +159,7 @@ def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict
                 "step_index": step_index,
                 "step_key": f"step_{step_index + 1}",
                 "step_label": step.get("label", f"Email {step_index + 1}"),
+                "condition": step.get("condition", "always"),
                 "template_id": (
                     [step["template_id"], *step.get("variant_template_ids", [])][
                         random.Random(f"{campaign_id}:{recipient['id']}:step:{step_index}:variant").randrange(
@@ -640,6 +642,15 @@ async def process_template_campaigns() -> None:
                 if not recipient or not template or not inbox:
                     await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "failed", "error": "Recipient, template, or inbox no longer exists"}})
                     continue
+                if item.get("step_index", 0) > 0:
+                    condition = item.get("condition", "always")
+                    prior_rows = await db.scheduled_emails.find({"campaign_id": item["campaign_id"], "recipient_id": item["recipient_id"], "step_index": {"$lt": item.get("step_index", 0)}, "status": "sent"}).to_list(50)
+                    opened = any(int(row.get("open_count", 0)) > 0 for row in prior_rows)
+                    clicked = any(int(row.get("click_count", 0)) > 0 for row in prior_rows)
+                    condition_met = condition == "always" or (condition == "opened" and opened) or (condition == "clicked" and clicked) or (condition == "not_opened" and not opened) or (condition == "not_clicked" and not clicked)
+                    if not condition_met:
+                        await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "cancelled", "error": f"Condition not met: {condition}"}})
+                        continue
                 if item.get("step_index", 0) > 0 and campaign.get("stop_on_reply", True):
                     replied = await db.replies.find_one({
                         "campaign_id": item["campaign_id"],
