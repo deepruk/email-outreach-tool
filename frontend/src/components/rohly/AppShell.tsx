@@ -65,7 +65,7 @@ function AppShell({ user }: { user: UserPublic }) {
   const queryClient = useQueryClient();
   const workspaces = useQuery({ queryKey: ["workspaces"], queryFn: () => apiGet<WorkspaceContext[]>("/workspaces") });
   const currentWorkspace = useQuery({ queryKey: ["workspace-current"], queryFn: () => apiGet<WorkspaceContext>("/workspaces/current") });
-  const selectWorkspace = useMutation({ mutationFn: (id: string) => apiPost<void>(`/workspaces/${id}/select`), onSuccess: async () => { queryClient.clear(); await queryClient.invalidateQueries(); navigate("/"); } });
+  const selectWorkspace = useMutation({ mutationFn: (id: string) => apiPost<void>(`/workspaces/${id}/select`), onSuccess: () => { queryClient.clear(); window.location.assign("/"); } });
   useEffect(() => { localStorage.setItem("rohly-sidebar-collapsed", String(collapsed)); }, [collapsed]);
   useEffect(() => {
     const button = document.querySelector<HTMLElement>('[data-testid="notifications-button"]');
