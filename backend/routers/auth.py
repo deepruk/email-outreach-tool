@@ -140,21 +140,22 @@ async def create_session(user: UserPublic, response: Response) -> UserPublic:
     return user
 
 
-@router.post("/signup", response_model=UserPublic, status_code=201)
-async def signup(input: SignupRequest, response: Response) -> UserPublic:
+
+@router.post("/signup", status_code=201)
+async def signup(input: SignupRequest) -> dict:
     email = input.email.strip().lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
-    user = UserRecord(
-        id=new_id(),
-        email=email,
-        name=input.name.strip(),
-        role="user",
-        created_at=datetime.now(timezone.utc),
-        password_hash=hash_password(input.password),
-    )
+    user = UserRecord(id=new_id(), email=email, name=input.name.strip(), role="user",
+                      created_at=datetime.now(timezone.utc), password_hash=hash_password(input.password),
+                      email_verified=False)
     await db.users.insert_one(user.model_dump())
-    return await create_session(UserPublic(**user.model_dump()), response)
+    try:
+        await _create_verification(user.id, user.email, user.name)
+    except Exception as exc:
+        await db.users.delete_one({"id": user.id})
+        raise HTTPException(status_code=503, detail="We could not send the verification email. Please try again later.") from exc
+    return {"verification_required": True, "email": user.email}
 
 
 @router.post("/login", response_model=UserPublic)
@@ -162,7 +163,43 @@ async def login(input: LoginRequest, response: Response) -> UserPublic:
     user = await db.users.find_one({"email": input.email.strip().lower()})
     if not user or not verify_password(input.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
+    if not user.get("email_verified", False):
+        raise HTTPException(status_code=403, detail="Please verify your email before signing in")
     return await create_session(UserPublic(**user), response)
+
+
+@router.post("/verify-email", response_model=UserPublic)
+async def verify_email(input: VerifyEmailRequest, response: Response) -> UserPublic:
+    row = await db.email_verifications.find_one({"token_hash": _verification_hash(input.token)})
+    if not row:
+        raise HTTPException(status_code=400, detail="Verification link is invalid or has expired")
+    expires = row["expires_at"]
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification link is invalid or has expired")
+    user = await db.users.find_one({"id": row["user_id"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}})
+    await db.email_verifications.delete_many({"user_id": user["id"]})
+    user["email_verified"] = True
+    return await create_session(UserPublic(**user), response)
+
+
+@router.post("/resend-verification")
+async def resend_verification(input: ResendVerificationRequest) -> dict:
+    email = input.email.strip().lower()
+    user = await db.users.find_one({"email": email})
+    if not user or user.get("email_verified", False):
+        return {"message": "If an unverified account exists, a verification email has been sent."}
+    try:
+        await _create_verification(user["id"], user["email"], user["name"])
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="We could not send the verification email. Please try again later.") from exc
+    return {"message": "Verification email sent"}
+
+
 
 
 @router.post("/logout", status_code=204)
