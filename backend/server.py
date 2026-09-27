@@ -18,6 +18,7 @@ from routers.auth import ensure_owner, router as auth_router
 from routers.product import process_reply_sync, router as product_router
 from routers.billing import router as billing_router
 from routers.open_tracking import router as open_tracking_router
+from routers.workspaces import router as workspaces_router
 from lib import csv_schedule_patch
 
 
@@ -92,5 +93,6 @@ api_router.include_router(open_tracking_router)
 api_router.include_router(auth_router)
 api_router.include_router(product_router)
 api_router.include_router(billing_router)
+api_router.include_router(workspaces_router)
 
 app.include_router(api_router)
