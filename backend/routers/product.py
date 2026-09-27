@@ -119,7 +119,7 @@ async def dashboard(user: UserPublic = Depends(require_user)) -> CommandCenter:
 @router.get("/campaigns", response_model=list[CampaignPerformance])
 async def campaigns(user: UserPublic = Depends(require_user)) -> list[CampaignPerformance]:
     csv_rows = await db.csv_campaigns.find({"user_id": user.id}).sort("created_at", -1).to_list(1000)
-    rohly_rows = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(1000)
+    rohly_rows = await db.campaigns.find({"campaign_type": "rohly_template", "user_id": user.id}).sort("created_at", -1).to_list(1000)
     rows = csv_rows + rohly_rows
     rows.sort(key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return [performance(row) for row in rows]
@@ -162,7 +162,7 @@ async def leads(page: int = Query(default=1, ge=1), page_size: int = Query(defau
     total = len(grouped)
     page_rows = grouped[(page - 1) * page_size: page * page_size]
     inbox_ids = {event["inbox_id"] for row in page_rows for event in row["events"]}
-    inbox_rows = await db.inboxes.find({"id": {"$in": list(inbox_ids)}}).to_list(1000)
+    inbox_rows = await db.inboxes.find({"id": {"$in": list(inbox_ids)}, "user_id": user.id}).to_list(1000)
     inbox_lookup = {row["id"]: row["email"] for row in inbox_rows}
     items = []
     for row in page_rows:
@@ -172,7 +172,7 @@ async def leads(page: int = Query(default=1, ge=1), page_size: int = Query(defau
         latest = max((aware(event.get("sent_at")) or aware(event.get("scheduled_at")) for event in events), default=None)
         first = events[0]
         status_value = "replied" if any(event.get("replied_at") for event in events) else (upcoming.get("status") if upcoming else events[-1].get("status", "scheduled"))
-        campaign = await db.csv_campaigns.find_one({"id": first["campaign_id"]})
+        campaign = await db.csv_campaigns.find_one({"id": first["campaign_id"], "user_id": user.id})
         items.append(LeadSummary(
             id=f"{first['campaign_id']}:{first['recipient_email']}",
             name=first.get("first_name") or first["recipient_email"],
@@ -240,7 +240,7 @@ async def update_reply(reply_id: str, input: ReplyUpdate, user: UserPublic = Dep
         raise HTTPException(status_code=404, detail="Reply not found")
     updates = {key: value for key, value in input.model_dump().items() if value is not None}
     if updates.get("sentiment") == "positive" and row.get("sentiment") != "positive":
-        await db.csv_campaigns.update_one({"id": row["campaign_id"]}, {"$inc": {"positive_replies": 1}})
+        await db.csv_campaigns.update_one({"id": row["campaign_id"], "user_id": user.id}, {"$inc": {"positive_replies": 1}})
     await db.replies.update_one({"id": reply_id, "user_id": user.id}, {"$set": updates})
     return Reply(**{**row, **updates})
 
