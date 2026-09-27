@@ -23,7 +23,8 @@ type Step = {
 
 type RecipientList = { id: string; filename: string; row_count: number; columns: string[]; uploaded_at: string };
 type UseListResponse = { source_id: string; filename: string; recipient_ids: string[]; recipients?: Recipient[]; count: number; duplicate_count?: number; skipped_duplicates?: number };
-type CreatedCampaign = { id: string };\ntype RohlyDraft = { id: string; name: string; active_step: number; selected_recipients: string[]; selected_inboxes: string[]; selected_lists: string[]; list_recipient_map: Record<string, string[]>; steps: Step[]; timezone: string; min_gap_minutes: number; max_gap_minutes: number; sending_window_start: string; sending_window_end: string; sending_days: number[]; stop_on_reply: boolean; follow_up_priority: number; distribution_mode: "pattern" | "random"; updated_at: string };
+type CreatedCampaign = { id: string };
+type RohlyDraft = { id: string; name: string; active_step: number; selected_recipients: string[]; selected_inboxes: string[]; selected_lists: string[]; list_recipient_map: Record<string, string[]>; steps: Step[]; timezone: string; min_gap_minutes: number; max_gap_minutes: number; sending_window_start: string; sending_window_end: string; sending_days: number[]; stop_on_reply: boolean; follow_up_priority: number; distribution_mode: "pattern" | "random"; updated_at: string };
 
 const VARIABLES = ["{{first_name}}", "{{name}}", "{{email}}", "{{company}}", "{{job_title}}", "{{industry}}", "{{city}}", "{{country}}"];
 
