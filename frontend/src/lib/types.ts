@@ -2,7 +2,7 @@ export interface Inbox { id:string; email:string; display_name:string; provider:
 export interface UserPublic { id:string; email:string; name:string; role:string; created_at:string }
 export interface Metric { label:string; value:number; change:number|null }
 export interface ChartPoint { date:string; sends:number; replies:number; positive_replies:number }
-export interface CampaignPerformance { id:string; name:string; status:string; source:string; leads:number; sent:number; replies:number; positive_replies:number; reply_rate:number; progress:number; created_at:string }
+export interface CampaignPerformance { id:string; name:string; status:string; source:string; leads:number; sent:number; replies:number; positive_replies:number; reply_rate:number; progress:number; failed:number; steps_count:number; created_at:string }
 export interface CommandCenter { emails_sent:Metric; replies:Metric; positive_replies:Metric; active_campaigns:Metric; scheduled:number; failed:number; inboxes_needing_attention:number; chart:ChartPoint[]; campaigns:CampaignPerformance[] }
 export interface SearchResult { id:string; type:"campaign"|"lead"|"inbox"|"reply"; title:string; subtitle:string; href:string }
 export interface LeadSummary { id:string; name:string; email:string; company:string; campaign_id:string; campaign_name:string; status:string; last_activity:string|null; next_step:string|null; next_step_at:string|null; inbox_email:string; timezone:string; paused:boolean }
