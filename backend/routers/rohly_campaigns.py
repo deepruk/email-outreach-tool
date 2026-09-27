@@ -290,7 +290,7 @@ async def test_run(input: TestRunRequest) -> dict:
 
 
 @router.post("")
-async def create_campaign(input: CampaignCreate) -> dict:
+async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(require_user)) -> dict:
     try:
         if input.min_gap_minutes > input.max_gap_minutes:
             raise HTTPException(status_code=422, detail="Minimum gap must be less than maximum gap")
@@ -359,6 +359,7 @@ async def create_campaign(input: CampaignCreate) -> dict:
             "next_send_at": None,
             "created_at": datetime.now(timezone.utc),
             "launched_at": None,
+            "user_id": user.id,
         }
         try:
             result = await db.campaigns.insert_one(campaign)
@@ -381,8 +382,8 @@ async def create_campaign(input: CampaignCreate) -> dict:
 
 
 @router.post("/{campaign_id}/launch")
-async def launch_campaign(campaign_id: str) -> dict:
-    campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template"})
+async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_user)) -> dict:
+    campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
     if not campaign:
         raise HTTPException(status_code=404, detail="Rohly campaign not found")
     if campaign.get("status") in {"active", "completed"}:
@@ -398,7 +399,7 @@ async def launch_campaign(campaign_id: str) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not schedule campaign: {str(exc)[:240]}") from exc
 
-    await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "source_type": "rohly_template"})
+    await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id})
     if events:
         try:
             await db.scheduled_emails.insert_many(events)
@@ -420,16 +421,16 @@ async def launch_campaign(campaign_id: str) -> dict:
 
 
 @router.get("/{campaign_id}/activity")
-async def campaign_activity(campaign_id: str) -> list[dict]:
-    rows = await db.scheduled_emails.find({"campaign_id": campaign_id, "source_type": "rohly_template"}).sort("scheduled_at", 1).to_list(5000)
+async def campaign_activity(campaign_id: str, user: UserPublic = Depends(require_user)) -> list[dict]:
+    rows = await db.scheduled_emails.find({"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id}).sort("scheduled_at", 1).to_list(5000)
     for row in rows:
         row.pop("_id", None)
     return rows
 
 
 @router.delete("/{campaign_id}", status_code=204)
-async def delete_campaign(campaign_id: str):
-    campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template"})
+async def delete_campaign(campaign_id: str, user: UserPublic = Depends(require_user)):
+    campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
     if not campaign:
         raise HTTPException(status_code=404, detail="Rohly campaign not found")
     if campaign.get("status") == "active":
