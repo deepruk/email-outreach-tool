@@ -315,6 +315,20 @@ async def get_source(source_id: str) -> CsvSource:
     return CsvSource(**row)
 
 
+@router.delete("/sources/{source_id}", status_code=204)
+async def delete_source(source_id: str):
+    row = await db.csv_sources.find_one({"id": source_id})
+    if not row:
+        raise HTTPException(status_code=404, detail="CSV source not found")
+    if await db.csv_campaigns.count_documents({"source_id": source_id}) > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="This CSV is used by an existing campaign and cannot be deleted. Delete the campaign first.",
+        )
+    await db.csv_sources.delete_one({"id": source_id})
+    return None
+
+
 @router.post("/sources/{source_id}/derive", response_model=CsvSource)
 async def derive_source(source_id: str, input: CsvSourceDeriveRequest) -> CsvSource:
     row = await db.csv_sources.find_one({"id": source_id})
