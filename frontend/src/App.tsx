@@ -14,6 +14,7 @@ import Imports from "@/pages/rohly/Imports";
 import SettingsPage from "@/pages/rohly/Settings";
 import CampaignDetail from "@/pages/rohly/CampaignDetail";
 import TemplateBuilder from "@/pages/rohly/TemplateBuilder";
+import TemplateBuilderSafe from "@/pages/rohly/TemplateBuilderSafe";
 import Billing from "@/pages/rohly/Billing";
 import CampaignEditor from "@/pages/rohly/CampaignEditor";
 
@@ -27,7 +28,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/campaigns/new" element={<TemplateBuilder />} />
-        <Route path="/campaigns/new/template" element={<TemplateBuilder />} />
+        <Route path="/campaigns/new/template" element={<TemplateBuilderSafe />} />
         <Route path="/campaigns/:campaignId" element={<CampaignDetail />} />
         <Route path="/campaigns/:campaignId/edit" element={<CampaignEditor />} />
         <Route path="/leads" element={<Leads />} />
