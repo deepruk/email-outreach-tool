@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
@@ -7,8 +7,8 @@ import {
   ArrowLeft, ArrowRight, Braces, CalendarClock, Check, FileSpreadsheet,
   FlaskConical, Mail, Plus, RefreshCw, Rocket, Settings2, Trash2, Upload, Users, X
 } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
-import type { Inbox, Recipient, Template } from "@/lib/types";
+import { apiGet, apiPost, apiUpload } from "@/lib/api";
+import type { CsvSource, Inbox, Recipient, Template } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -109,6 +109,19 @@ export default function TemplateBuilder() {
         : `${result.count} contacts added from ${result.filename}`);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add this list"),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return apiUpload<CsvSource>("/csv/sources", form);
+    },
+    onSuccess: (result) => {
+      toast.success(`${result.row_count} leads loaded from ${result.filename}`);
+      useListMutation.mutate(result.id);
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not upload this CSV"),
   });
 
   const testMutation = useMutation({
@@ -292,9 +305,9 @@ export default function TemplateBuilder() {
             setListPickerOpen={setListPickerOpen}
             onToggle={(id) => toggle(setSelectedRecipients, id)}
             onRemoveList={removeRecipientList}
-            onOpenUpload={() => navigate("/imports")}
+            onUploadFile={(file) => uploadMutation.mutate(file)}
             onUseList={(id) => useListMutation.mutate(id)}
-            useListPending={useListMutation.isPending}
+            useListPending={useListMutation.isPending || uploadMutation.isPending}
           />
         )}
 
@@ -394,7 +407,7 @@ export default function TemplateBuilder() {
           selectedLists={selectedLists}
           pending={useListMutation.isPending}
           onRefresh={() => listsQuery.refetch()}
-          onUpload={() => navigate("/imports")}
+          onUploadFile={(file) => { setListPickerOpen(false); uploadMutation.mutate(file); }}
           onClose={() => setListPickerOpen(false)}
           onUse={(id) => useListMutation.mutate(id)}
         />
@@ -412,7 +425,7 @@ function LeadListStep(props: {
   setListPickerOpen: (value: boolean) => void;
   onToggle: (id: string) => void;
   onRemoveList: (id: string) => void;
-  onOpenUpload: () => void;
+  onUploadFile: (file: File) => void;
   onUseList: (id: string) => void;
   useListPending: boolean;
 }) {
@@ -429,7 +442,10 @@ function LeadListStep(props: {
           <h2 className="mt-5 text-sm font-semibold text-slate-800">No leads added yet</h2>
           <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-slate-500">Add leads to your campaign to start sending emails. You can upload a CSV or select from your existing saved lists.</p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            <Button onClick={props.onOpenUpload} className="gap-2 bg-violet-600 hover:bg-violet-700"><Upload size={14} /> Upload CSV</Button>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700">
+              <Upload size={14} /> Upload CSV
+              <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
+            </label>
             <Button variant="outline" onClick={() => props.setListPickerOpen(true)} className="gap-2"><FileSpreadsheet size={14} /> Import from Saved Lists</Button>
           </div>
         </div>
@@ -441,7 +457,10 @@ function LeadListStep(props: {
               <p className="mt-1 text-[11px] text-slate-500">{props.selectedRecipients.length} leads selected</p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={props.onOpenUpload} className="gap-1"><Upload size={13} /> Add CSV</Button>
+              <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                <Upload size={13} /> Add CSV
+                <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
+              </label>
               <Button variant="outline" size="sm" onClick={() => props.setListPickerOpen(true)} className="gap-1"><Plus size={13} /> Add saved list</Button>
             </div>
           </div>
@@ -694,7 +713,7 @@ function ListPicker(props: {
   selectedLists: string[];
   pending: boolean;
   onRefresh: () => void;
-  onUpload: () => void;
+  onUploadFile: (file: File) => void;
   onClose: () => void;
   onUse: (id: string) => void;
 }) {
@@ -702,7 +721,10 @@ function ListPicker(props: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-semibold">Import from Saved Lists</h2><p className="mt-1 text-xs text-slate-500">Only new contacts are added; duplicates are skipped automatically.</p></div><Button variant="ghost" size="icon" onClick={props.onClose}><X size={17} /></Button></div>
-        <div className="flex gap-2 border-b border-slate-100 px-5 py-3"><Button variant="outline" size="sm" onClick={props.onRefresh} className="gap-1"><RefreshCw size={13} /> Refresh</Button><Button size="sm" onClick={props.onUpload} className="gap-1 bg-violet-600"><Upload size={13} /> Upload CSV</Button></div>
+        <div className="flex gap-2 border-b border-slate-100 px-5 py-3"><Button variant="outline" size="sm" onClick={props.onRefresh} className="gap-1"><RefreshCw size={13} /> Refresh</Button><label className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-violet-600 px-3 py-2 text-xs font-semibold text-white">
+            <Upload size={13} /> Upload CSV
+            <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
+          </label></div>
         <div className="max-h-[60vh] overflow-auto p-5">{props.lists.length ? props.lists.map((list) => { const active = props.selectedLists.includes(list.id); return <div key={list.id} className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 p-4"><FileSpreadsheet size={17} className="text-violet-600" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{list.filename}</p><p className="mt-1 text-[10px] text-slate-500">{list.row_count} contacts</p></div><Button size="sm" variant={active ? "outline" : "default"} disabled={active || props.pending} onClick={() => props.onUse(list.id)}>{active ? "Added" : props.pending ? "Adding…" : "Add list"}</Button></div>; }) : <div className="py-10 text-center text-xs text-slate-500">No saved lists found. Upload a CSV first.</div>}</div>
         <div className="flex justify-end border-t border-slate-200 px-5 py-3"><Button variant="outline" onClick={props.onClose}>Done</Button></div>
       </div>
