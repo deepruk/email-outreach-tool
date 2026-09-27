@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { MoreHorizontal, Pause, Play, Plus, Search, Square, Trash2 } from "lucide-react";
+import { FileText, MoreHorizontal, Pause, Play, Plus, Search, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api";
-import type { CsvCampaign } from "@/lib/types";
+import type { CsvCampaign } from "@/lib/types";\ntype RohlyDraft = { id: string; name: string; active_step: number; selected_recipients: string[]; selected_inboxes: string[]; steps: Array<{ subject: string }>; updated_at: string };
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
@@ -15,7 +15,7 @@ export default function Campaigns() {
   const [tab, setTab] = useState<"all" | "running" | "paused" | "stopped">("all");
   const [search, setSearch] = useState("");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
+  const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });\n  const draftsQuery = useQuery({ queryKey: ["rohly-drafts"], queryFn: () => apiGet<RohlyDraft[]>("/workspace/rohly-campaigns/drafts") });\n  const deleteDraft = useMutation({ mutationFn: (id: string) => apiDelete(`/workspace/rohly-campaigns/drafts/${id}`), onSuccess: () => { client.invalidateQueries({ queryKey: ["rohly-drafts"] }); toast.success("Draft deleted"); }, onError: () => toast.error("Unable to delete draft") });
 
   const status = useMutation({
     mutationFn: ({ id, value }: { id: string; value: "running" | "paused" | "stopped" }) =>
@@ -90,6 +90,19 @@ export default function Campaigns() {
         </div>
       </div>
 
+      {draftsQuery.data?.length ? (
+        <div className="border-b border-amber-100 bg-amber-50/60 px-5 py-4 lg:px-7">
+          <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-bold text-slate-900">Drafts ({draftsQuery.data.length})</h2><p className="mt-0.5 text-[11px] text-slate-500">Your unfinished Rohly campaigns are saved automatically.</p></div></div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {draftsQuery.data.map((draft) => (
+              <div key={draft.id} className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start gap-3"><div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><FileText size={16} /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-900">{draft.name}</p><p className="mt-1 text-[10px] text-slate-500">{draft.steps?.length || 0} sequence {(draft.steps?.length || 0) === 1 ? "step" : "steps"} • {draft.selected_recipients?.length || 0} leads</p><p className="mt-1 text-[10px] text-slate-400">Saved {new Date(draft.updated_at).toLocaleString()}</p></div></div>
+                <div className="mt-4 flex items-center gap-2"><Link to={`/campaigns/new/template?draft=${draft.id}`} className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-center text-[11px] font-semibold text-white hover:bg-violet-700">Continue draft</Link><button type="button" onClick={() => { if (window.confirm(`Delete draft "${draft.name}"?`)) deleteDraft.mutate(draft.id); }} className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label="Delete draft"><Trash2 size={14} /></button></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="px-5 py-5 lg:px-7">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
