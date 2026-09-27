@@ -56,6 +56,7 @@ export default function TemplateBuilder() {
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [selectedInboxes, setSelectedInboxes] = useState<string[]>([]);
   const [selectedLists, setSelectedLists] = useState<string[]>([]);
+  const [listRecipientMap, setListRecipientMap] = useState<Record<string, string[]>>({});
   const [listPickerOpen, setListPickerOpen] = useState(false);
   const [steps, setSteps] = useState<Step[]>([emptyStep(0)]);
   const [timezone, setTimezone] = useState("Asia/Kolkata");
@@ -94,6 +95,7 @@ export default function TemplateBuilder() {
     onSuccess: async (result) => {
       setSelectedRecipients((current) => Array.from(new Set([...current, ...result.recipient_ids])));
       setSelectedLists((current) => Array.from(new Set([...current, result.source_id])));
+      setListRecipientMap((current) => ({ ...current, [result.source_id]: result.recipient_ids }));
       await queryClient.invalidateQueries({ queryKey: ["rohly-campaign-recipients"] });
       toast.success(`${result.count} contacts added from ${result.filename}`);
     },
@@ -141,6 +143,18 @@ export default function TemplateBuilder() {
 
   const toggle = (setter: Dispatch<SetStateAction<string[]>>, id: string) =>
     setter((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+
+  const removeRecipientList = (sourceId: string) => {
+    const idsToRemove = new Set(listRecipientMap[sourceId] ?? []);
+    setSelectedLists((current) => current.filter((id) => id !== sourceId));
+    setListRecipientMap((current) => {
+      const next = { ...current };
+      delete next[sourceId];
+      return next;
+    });
+    setSelectedRecipients((current) => current.filter((id) => !idsToRemove.has(id)));
+    toast.success("Recipient list removed from this campaign");
+  };
 
   const updateStep = (index: number, patch: Partial<Step>) =>
     setSteps((current) => current.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step));
@@ -247,7 +261,7 @@ export default function TemplateBuilder() {
               <div className="mt-3 flex flex-wrap gap-2">
                 {selectedLists.map((sourceId) => {
                   const list = lists.find((item) => item.id === sourceId);
-                  return <span key={sourceId} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700"><Check size={11} /> {list?.filename || "Imported list"}</span>;
+                  return <span key={sourceId} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700"><Check size={11} /> {list?.filename || "Imported list"}<button type="button" aria-label={`Remove ${list?.filename || "imported list"}`} onClick={() => removeRecipientList(sourceId)} className="ml-1 rounded-full p-0.5 text-blue-500 hover:bg-blue-100 hover:text-blue-800"><X size={11} /></button></span>;
                 })}
               </div>
             )}
