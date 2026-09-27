@@ -75,6 +75,8 @@ def performance(row: dict) -> CampaignPerformance:
         positive_replies=int(row.get("positive_replies", 0)),
         reply_rate=round((replies / sent) * 100, 1) if sent else 0,
         progress=round((sent / total_planned) * 100, 1),
+        failed=int(row.get("failed_emails", row.get("failed_count", 0))),
+        steps_count=len(row.get("steps", [])),
         created_at=row["created_at"],
     )
 
