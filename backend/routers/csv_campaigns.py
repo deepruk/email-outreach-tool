@@ -243,7 +243,7 @@ async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tup
 
 
 async def calculate_edit_impact(campaign_id: str, proposed: list[ScheduledEmail], skipped: int) -> CampaignEditImpact:
-    existing = await db.scheduled_emails.find({"campaign_id": campaign_id}).to_list(100000)
+    existing = await db.scheduled_emails.find({"campaign_id": campaign_id, "user_id": user.id}).to_list(100000)
     protected_rows = [row for row in existing if row.get("status") in {"sent", "failed"} or row.get("replied_at")]
     future_rows = [row for row in existing if row.get("status") == "scheduled" and not row.get("replied_at")]
     protected_keys = {(row["recipient_email"].lower(), row["step_key"]) for row in protected_rows}
@@ -318,16 +318,16 @@ async def get_source(source_id: str, user: UserPublic = Depends(require_user)) -
 
 
 @router.delete("/sources/{source_id}", status_code=204)
-async def delete_source(source_id: str):
-    row = await db.csv_sources.find_one({"id": source_id})
+async def delete_source(source_id: str, user: UserPublic = Depends(require_user)):
+    row = await db.csv_sources.find_one({"id": source_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="CSV source not found")
-    if await db.csv_campaigns.count_documents({"source_id": source_id}) > 0:
+    if await db.csv_campaigns.count_documents({"source_id": source_id, "user_id": user.id}) > 0:
         raise HTTPException(
             status_code=409,
             detail="This CSV is used by an existing campaign and cannot be deleted. Delete the campaign first.",
         )
-    await db.csv_sources.delete_one({"id": source_id})
+    await db.csv_sources.delete_one({"id": source_id, "user_id": user.id})
     return None
 
 
@@ -344,13 +344,13 @@ async def derive_source(source_id: str, input: CsvSourceDeriveRequest, user: Use
         row_count=len(normalized),
         rows=normalized,
     )
-    await db.csv_sources.insert_one(source.model_dump())
+    await db.csv_sources.insert_one({**source.model_dump(), "user_id": user.id})
     return source
 
 
 @router.post("/campaigns/preview", response_model=CsvCampaignPreview)
-async def preview_campaign(input: CsvCampaignCreate) -> CsvCampaignPreview:
-    row = await db.csv_sources.find_one({"id": input.source_id})
+async def preview_campaign(input: CsvCampaignCreate, user: UserPublic = Depends(require_user)) -> CsvCampaignPreview:
+    row = await db.csv_sources.find_one({"id": input.source_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     return preview_from_source(CsvSource(**row), input)
@@ -358,7 +358,7 @@ async def preview_campaign(input: CsvCampaignCreate) -> CsvCampaignPreview:
 
 @router.post("/campaigns", response_model=CsvCampaign)
 async def create_campaign(input: CsvCampaignCreate, user: UserPublic = Depends(require_user)) -> CsvCampaign:
-    source_row = await db.csv_sources.find_one({"id": input.source_id})
+    source_row = await db.csv_sources.find_one({"id": input.source_id, "user_id": user.id})
     if not source_row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     source = CsvSource(**source_row)
@@ -389,22 +389,22 @@ async def list_campaigns(user: UserPublic = Depends(require_user)) -> list[CsvCa
 
 
 @router.post("/campaigns/{campaign_id}/edit-impact", response_model=CampaignEditImpact)
-async def preview_edit_impact(campaign_id: str, input: CsvCampaignCreate) -> CampaignEditImpact:
-    if not await db.csv_campaigns.find_one({"id": campaign_id}):
+async def preview_edit_impact(campaign_id: str, input: CsvCampaignCreate, user: UserPublic = Depends(require_user)) -> CampaignEditImpact:
+    if not await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id}):
         raise HTTPException(status_code=404, detail="CSV campaign not found")
     proposed, skipped = await build_edit_schedule(campaign_id, input)
     return await calculate_edit_impact(campaign_id, proposed, skipped)
 
 
 @router.post("/campaigns/{campaign_id}/test-send", response_model=TestEmailResponse)
-async def send_campaign_test(campaign_id: str, input: TestEmailRequest) -> TestEmailResponse:
-    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id})
+async def send_campaign_test(campaign_id: str, input: TestEmailRequest, user: UserPublic = Depends(require_user)) -> TestEmailResponse:
+    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id})
     if not campaign_row:
         raise HTTPException(status_code=404, detail="CSV campaign not found")
     recipient = input.recipient_email.strip()
     if "@" not in recipient or recipient.startswith("@") or recipient.endswith("@"):
         raise HTTPException(status_code=422, detail="Enter a valid test recipient email")
-    inbox_rows = await db.inboxes.find({"id": {"$in": campaign_row.get("inbox_ids", [])}}).to_list(100)
+    inbox_rows = await db.inboxes.find({"id": {"$in": campaign_row.get("inbox_ids", [])}, "user_id": user.id}).to_list(100)
     inbox_lookup = {row["id"]: row for row in inbox_rows}
     results: list[TestEmailInboxResult] = []
     for inbox_id in campaign_row.get("inbox_ids", []):
@@ -450,11 +450,11 @@ async def send_campaign_test(campaign_id: str, input: TestEmailRequest) -> TestE
 
 
 @router.put("/campaigns/{campaign_id}", response_model=CampaignEditResult)
-async def edit_campaign(campaign_id: str, input: CsvCampaignCreate) -> CampaignEditResult:
-    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id})
+async def edit_campaign(campaign_id: str, input: CsvCampaignCreate, user: UserPublic = Depends(require_user)) -> CampaignEditResult:
+    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id})
     if not campaign_row:
         raise HTTPException(status_code=404, detail="CSV campaign not found")
-    source_row = await db.csv_sources.find_one({"id": input.source_id})
+    source_row = await db.csv_sources.find_one({"id": input.source_id, "user_id": user.id})
     if not source_row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     await db.csv_campaigns.update_one({"id": campaign_id}, {"$set": {"edit_lock": True}})
@@ -492,8 +492,8 @@ async def edit_campaign(campaign_id: str, input: CsvCampaignCreate) -> CampaignE
 
 
 @router.post("/campaigns/{campaign_id}/launch", response_model=CsvCampaignLaunchResponse)
-async def launch_campaign(campaign_id: str) -> CsvCampaignLaunchResponse:
-    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id})
+async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_user)) -> CsvCampaignLaunchResponse:
+    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id})
     if not campaign_row:
         raise HTTPException(status_code=404, detail="CSV campaign not found")
     campaign = CsvCampaign(**campaign_row)
@@ -532,8 +532,8 @@ async def launch_campaign(campaign_id: str) -> CsvCampaignLaunchResponse:
 
 
 @router.patch("/campaigns/{campaign_id}/status", response_model=CsvCampaign)
-async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest) -> CsvCampaign:
-    row = await db.csv_campaigns.find_one({"id": campaign_id})
+async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest, user: UserPublic = Depends(require_user)) -> CsvCampaign:
+    row = await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="CSV campaign not found")
     await db.csv_campaigns.update_one({"id": campaign_id}, {"$set": {"status": input.status}})
@@ -545,18 +545,18 @@ async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest)
 
 
 @router.get("/campaigns/{campaign_id}/activity", response_model=list[ScheduledEmail])
-async def campaign_activity(campaign_id: str) -> list[ScheduledEmail]:
-    rows = await db.scheduled_emails.find({"campaign_id": campaign_id}).sort("scheduled_at", 1).to_list(5000)
+async def campaign_activity(campaign_id: str, user: UserPublic = Depends(require_user)) -> list[ScheduledEmail]:
+    rows = await db.scheduled_emails.find({"campaign_id": campaign_id, "user_id": user.id}).sort("scheduled_at", 1).to_list(5000)
     return [ScheduledEmail(**row) for row in rows]
 
 
 @router.get("/campaigns/{campaign_id}/export")
-async def export_campaign_status(campaign_id: str) -> StreamingResponse:
-    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id})
+async def export_campaign_status(campaign_id: str, user: UserPublic = Depends(require_user)) -> StreamingResponse:
+    campaign_row = await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id})
     if not campaign_row:
         raise HTTPException(status_code=404, detail="CSV campaign not found")
     campaign = CsvCampaign(**campaign_row)
-    source_row = await db.csv_sources.find_one({"id": campaign.source_id})
+    source_row = await db.csv_sources.find_one({"id": campaign.source_id, "user_id": user.id})
     if not source_row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     source = CsvSource(**source_row)
@@ -572,7 +572,7 @@ async def export_campaign_status(campaign_id: str) -> StreamingResponse:
         events = by_row.get(row_index, [])
         statuses = [f"{item['step_label']}: {item['status']}" for item in events]
         inbox_ids = sorted({item["inbox_id"] for item in events})
-        inbox_rows = await db.inboxes.find({"id": {"$in": inbox_ids}}).to_list(100) if inbox_ids else []
+        inbox_rows = await db.inboxes.find({"id": {"$in": inbox_ids}, "user_id": user.id}).to_list(100) if inbox_ids else []
         inbox_lookup = {item["id"]: item["email"] for item in inbox_rows}
         writer.writerow({
             **source_data,
