@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import CsvCampaignWizard from "@/pages/CsvCampaignWizard";
 import { RequireAuth } from "@/components/rohly/AppShell";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/rohly/Dashboard";
@@ -25,7 +24,6 @@ export default function App() {
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/campaigns/new" element={<TemplateBuilder />} />
         <Route path="/campaigns/new/template" element={<TemplateBuilder />} />
-        <Route path="/campaigns/new/csv" element={<CsvCampaignWizard />} />
         <Route path="/campaigns/:campaignId" element={<CampaignDetail />} />
         <Route path="/campaigns/:campaignId/edit" element={<CampaignEditor />} />
         <Route path="/leads" element={<Leads />} />
