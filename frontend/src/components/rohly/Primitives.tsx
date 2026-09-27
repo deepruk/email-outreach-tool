@@ -5,11 +5,11 @@ export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?:
 }
 
 export function Surface({ children, className = "", testId }: { children: ReactNode; className?: string; testId: string }) {
-  return <section className={`rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)] ${className}`} data-testid={testId}>{children}</section>;
+  return <section className={`rounded-xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03),0_8px_24px_rgba(15,23,42,0.025)] ${className}`} data-testid={testId}>{children}</section>;
 }
 
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
-  return <div className="flex min-h-52 flex-col items-center justify-center px-6 py-10 text-center" data-testid="empty-state"><div className="mb-4 size-10 rounded-lg border border-slate-200 bg-slate-50" /><p className="text-sm font-semibold text-slate-800">{title}</p><p className="mt-1.5 max-w-sm text-xs leading-relaxed text-slate-500">{description}</p>{action}</div>;
+  return <div className="flex min-h-52 flex-col items-center justify-center px-6 py-10 text-center" data-testid="empty-state"><div className="mb-4 flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg text-slate-300">+</div><p className="text-sm font-semibold text-slate-800">{title}</p><p className="mt-1.5 max-w-sm text-xs leading-relaxed text-slate-500">{description}</p>{action}</div>;
 }
 
 export function SkeletonRows({ rows = 5 }: { rows?: number }) {
