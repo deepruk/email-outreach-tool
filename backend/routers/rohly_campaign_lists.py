@@ -153,10 +153,15 @@ async def use_recipient_list(source_id: str) -> dict:
                 f"Available columns: {available}"
             ),
         )
+    imported_recipients = await db.recipients.find(
+        {"id": {"$in": recipient_ids}},
+        {"_id": 0},
+    ).to_list(len(recipient_ids))
     return {
         "source_id": source_id,
         "filename": row["filename"],
         "recipient_ids": recipient_ids,
+        "recipients": imported_recipients,
         "count": len(recipient_ids),
         "duplicate_count": duplicate_count,
         "skipped_duplicates": duplicate_count,
