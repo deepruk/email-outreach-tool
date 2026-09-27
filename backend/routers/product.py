@@ -26,6 +26,7 @@ from models.product import (
 from models.scheduler import Inbox
 from routers.auth import require_user
 from routers.scheduler import get_gmail_credentials
+from lib.campaign_events import emit_campaign_event
 
 router = APIRouter(prefix="/product", tags=["product"], dependencies=[Depends(require_user)])
 
@@ -466,24 +467,17 @@ async def sync_replies_once() -> None:
                     },
                     {"$set": {"replied_at": received_at}},
                 )
-                await db.scheduled_emails.update_many(
-                    {
-                        "campaign_id": sent["campaign_id"],
-                        "recipient_email": sent["recipient_email"],
-                        "status": "scheduled",
-                    },
-                    {
-                        "$set": {
-                            "status": "cancelled",
-                            "error": "Cancelled after reply detected",
-                        }
-                    },
-                )
-
-                await db.csv_campaigns.update_one(
-                    {"id": sent["campaign_id"]},
-                    {"$inc": {"replies": 1}},
-                )
+                is_rohly = sent.get("source_type") == "rohly_template"
+                campaign_collection = db.campaigns if is_rohly else db.csv_campaigns
+                reply_campaign = await campaign_collection.find_one({"id": sent["campaign_id"]})
+                if not reply_campaign or reply_campaign.get("stop_on_reply", True):
+                    await db.scheduled_emails.update_many(
+                        {"campaign_id": sent["campaign_id"], "recipient_email": sent["recipient_email"], "status": "scheduled"},
+                        {"$set": {"status": "cancelled", "error": "Cancelled after reply detected"}},
+                    )
+                await campaign_collection.update_one({"id": sent["campaign_id"]}, {"$inc": {"replies": 1}})
+                if reply_campaign:
+                    await emit_campaign_event(reply_campaign, "replied", {"recipient_email": sent["recipient_email"], "reply_id": reply.id, "received_at": received_at})
 
             await db.inboxes.update_one(
                 {"id": inbox["id"]},
