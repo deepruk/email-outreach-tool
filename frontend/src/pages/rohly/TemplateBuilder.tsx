@@ -118,7 +118,7 @@ export default function TemplateBuilder() {
       return apiUpload<CsvSource>("/csv/sources", form);
     },
     onSuccess: (result) => {
-      toast.success(`${result.row_count} leads loaded from ${result.filename}`);
+      // Upload creates the CSV source; import its leads into this campaign before showing success.
       useListMutation.mutate(result.id);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not upload this CSV"),
