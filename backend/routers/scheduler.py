@@ -157,7 +157,7 @@ async def get_google_profile(access_token: str) -> dict[str, str]:
 
 
 @oauth_router.get("/start")
-async def start_gmail_oauth() -> RedirectResponse:
+async def start_gmail_oauth(user: UserPublic = Depends(require_user)) -> RedirectResponse:
     flow = make_oauth_flow(autogenerate_code_verifier=True)
     authorization_url, state = flow.authorization_url(
         access_type="offline",
@@ -165,13 +165,13 @@ async def start_gmail_oauth() -> RedirectResponse:
         include_granted_scopes="true",
     )
     await db.oauth_states.insert_one(
-        {"state": state, "code_verifier": flow.code_verifier, "created_at": utc_now()}
+        {"state": state, "code_verifier": flow.code_verifier, "created_at": utc_now(), "user_id": user.id}
     )
     return RedirectResponse(authorization_url)
 
 
 @oauth_router.get("/callback")
-async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
+async def gmail_oauth_callback(code: str, state: str, user: UserPublic = Depends(require_user)) -> RedirectResponse:
     oauth_state = await db.oauth_states.find_one_and_delete({"state": state})
     if not oauth_state:
         raise HTTPException(status_code=400, detail="OAuth state expired or invalid")
@@ -196,7 +196,7 @@ async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
         return RedirectResponse(
             f"{os.environ.get('APP_URL', 'http://localhost:3000')}/?gmail=error&reason=profile_lookup"
         )
-    inbox = await db.inboxes.find_one({"email": email})
+    inbox = await db.inboxes.find_one({"email": email, "user_id": user.id})
     if inbox:
         inbox_id = inbox["id"]
         await db.inboxes.update_one(
@@ -206,7 +206,7 @@ async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
     else:
         new_inbox = Inbox(email=email, display_name=email.split("@")[0], is_mocked=False, reply_tracking_status="active")
         inbox_id = new_inbox.id
-        await db.inboxes.insert_one(new_inbox.model_dump())
+        await db.inboxes.insert_one({**new_inbox.model_dump(), "user_id": user.id})
     await db.oauth_tokens.update_one(
         {"inbox_id": inbox_id},
         {
@@ -221,13 +221,13 @@ async def gmail_oauth_callback(code: str, state: str) -> RedirectResponse:
         upsert=True,
     )
     await db.activities.insert_one(
-        Activity(message="Gmail inbox connected", detail=email, tone="success").model_dump()
+        {**Activity(message="Gmail inbox connected", detail=email, tone="success").model_dump(), "user_id": user.id}
     )
     return RedirectResponse(f"{os.environ.get('APP_URL', 'http://localhost:3000')}/?gmail=connected")
 
 
-async def latest_activity(limit: int = 6) -> list[Activity]:
-    rows = await db.activities.find().sort("time", -1).to_list(limit)
+async def latest_activity(user_id: str, limit: int = 6) -> list[Activity]:
+    rows = await db.activities.find({"user_id": user_id}).sort("time", -1).to_list(limit)
     return [Activity(**row) for row in rows]
 
 
@@ -262,7 +262,7 @@ async def get_dashboard(user: UserPublic = Depends(require_user)) -> Overview:
         active_campaigns=sum(1 for row in campaigns if row.get("status") == "active"),
         next_send_at=next_send_at,
         next_send_in_minutes=diff_minutes,
-        recent_activity=await latest_activity(),
+        recent_activity=await latest_activity(user.id),
     )
 
 
@@ -292,7 +292,7 @@ async def connect_inbox(input: InboxConnectRequest, user: UserPublic = Depends(r
     )
     await db.inboxes.insert_one({**inbox.model_dump(), "user_id": user.id})
     await db.activities.insert_one(
-        Activity(
+        {**Activity(
             message="Inbox connected",
             detail=f"{inbox.email} is ready for campaign routing",
             tone="success",
