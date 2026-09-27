@@ -12,12 +12,10 @@ import Analytics from "@/pages/rohly/Analytics";
 import Imports from "@/pages/rohly/Imports";
 import SettingsPage from "@/pages/rohly/Settings";
 import CampaignDetail from "@/pages/rohly/CampaignDetail";
-import CampaignSource from "@/pages/rohly/CampaignSource";
-import TemplateBuilder from "@/pages/rohly/TemplateBuilderSafe";
+import TemplateBuilder from "@/pages/rohly/TemplateBuilder";
 import Billing from "@/pages/rohly/Billing";
 import CampaignEditor from "@/pages/rohly/CampaignEditor";
 
-// One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
   return (
     <Routes>
@@ -25,9 +23,9 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/campaigns" element={<Campaigns />} />
-        <Route path="/campaigns/new" element={<CampaignSource />} />
-        <Route path="/campaigns/new/csv" element={<CsvCampaignWizard />} />
+        <Route path="/campaigns/new" element={<TemplateBuilder />} />
         <Route path="/campaigns/new/template" element={<TemplateBuilder />} />
+        <Route path="/campaigns/new/csv" element={<CsvCampaignWizard />} />
         <Route path="/campaigns/:campaignId" element={<CampaignDetail />} />
         <Route path="/campaigns/:campaignId/edit" element={<CampaignEditor />} />
         <Route path="/leads" element={<Leads />} />
