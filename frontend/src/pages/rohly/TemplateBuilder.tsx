@@ -22,7 +22,7 @@ type Step = {
 };
 
 type RecipientList = { id: string; filename: string; row_count: number; columns: string[]; uploaded_at: string };
-type UseListResponse = { source_id: string; filename: string; recipient_ids: string[]; count: number; duplicate_count?: number; skipped_duplicates?: number };
+type UseListResponse = { source_id: string; filename: string; recipient_ids: string[]; recipients?: Recipient[]; count: number; duplicate_count?: number; skipped_duplicates?: number };
 type CreatedCampaign = { id: string };
 
 const VARIABLES = ["{{first_name}}", "{{name}}", "{{email}}", "{{company}}", "{{job_title}}", "{{industry}}", "{{city}}", "{{country}}"];
@@ -102,7 +102,15 @@ export default function TemplateBuilder() {
       setSelectedRecipients((current) => Array.from(new Set([...current, ...result.recipient_ids])));
       setSelectedLists((current) => Array.from(new Set([...current, result.source_id])));
       setListRecipientMap((current) => ({ ...current, [result.source_id]: result.recipient_ids }));
-      await queryClient.invalidateQueries({ queryKey: ["rohly-campaign-recipients"] });
+      if (result.recipients?.length) {
+        queryClient.setQueryData<Recipient[]>(["rohly-campaign-recipients"], (current = []) => {
+          const byId = new Map(current.map((recipient) => [recipient.id, recipient]));
+          for (const recipient of result.recipients ?? []) byId.set(recipient.id, recipient);
+          return Array.from(byId.values());
+        });
+      } else {
+        await queryClient.invalidateQueries({ queryKey: ["rohly-campaign-recipients"] });
+      }
       const duplicates = result.duplicate_count ?? result.skipped_duplicates ?? 0;
       toast.success(duplicates > 0
         ? `${result.count} new contacts added; ${duplicates} duplicates skipped`
