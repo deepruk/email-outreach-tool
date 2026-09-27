@@ -160,34 +160,50 @@ export default function TemplateBuilder() {
   const createMutation = useMutation({
     mutationFn: async () => {
       const templateIds: string[] = [];
-      for (const step of steps) {
-        const template = await apiPost<Template>("/workspace/templates", {
-          name: step.template_name.trim(),
-          subject: step.subject.trim(),
-          body: step.body,
-        });
-        templateIds.push(template.id);
+      for (let index = 0; index < steps.length; index += 1) {
+        try {
+          const step = steps[index];
+          const template = await apiPost<Template>("/workspace/templates", {
+            name: step.template_name.trim(),
+            subject: step.subject.trim(),
+            body: step.body,
+          });
+          templateIds.push(template.id);
+        } catch (error) {
+          throw new Error(`Could not save sequence step ${index + 1}: ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
       }
-      const created = await apiPost<CreatedCampaign>("/workspace/rohly-campaigns", {
-        name,
-        inbox_ids: selectedInboxes,
-        recipient_ids: selectedRecipients,
-        steps: steps.map((step, index) => ({
-          template_id: templateIds[index],
-          label: step.label,
-          delay_days: step.delay_days,
-        })),
-        timezone,
-        min_gap_minutes: minGapMinutes,
-        max_gap_minutes: maxGapMinutes,
-        sending_window_start: sendingWindowStart,
-        sending_window_end: sendingWindowEnd,
-        sending_days: sendingDays,
-        stop_on_reply: stopOnReply,
-        follow_up_priority: followUpPriority,
-        distribution_mode: distributionMode,
-      });
-      await apiPost(`/workspace/rohly-campaigns/${created.id}/launch`, {});
+
+      let created: CreatedCampaign;
+      try {
+        created = await apiPost<CreatedCampaign>("/workspace/rohly-campaigns", {
+          name,
+          inbox_ids: selectedInboxes,
+          recipient_ids: selectedRecipients,
+          steps: steps.map((step, index) => ({
+            template_id: templateIds[index],
+            label: step.label,
+            delay_days: step.delay_days,
+          })),
+          timezone,
+          min_gap_minutes: minGapMinutes,
+          max_gap_minutes: maxGapMinutes,
+          sending_window_start: sendingWindowStart,
+          sending_window_end: sendingWindowEnd,
+          sending_days: sendingDays,
+          stop_on_reply: stopOnReply,
+          follow_up_priority: followUpPriority,
+          distribution_mode: distributionMode,
+        });
+      } catch (error) {
+        throw new Error(`Could not create campaign: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
+
+      try {
+        await apiPost(`/workspace/rohly-campaigns/${created.id}/launch`, {});
+      } catch (error) {
+        throw new Error(`Could not launch campaign: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
       return created;
     },
     onSuccess: () => {
