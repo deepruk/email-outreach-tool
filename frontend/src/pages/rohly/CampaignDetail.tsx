@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Download, FlaskConical, Pause, Pencil, Play, Square } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarClock, Download, FlaskConical, Mail, Pause, Pencil, Play, Send, Settings2, Square, Users, Webhook } from "lucide-react";
 import { toast } from "sonner";
 import { apiGet, apiPatch } from "@/lib/api";
 import type { CsvCampaign, ScheduledEmail } from "@/lib/types";
@@ -40,7 +40,8 @@ export default function CampaignDetail() {
     <div className="flex gap-1 overflow-x-auto border-b border-slate-200 px-5 lg:px-7" role="tablist">{tabs.map((item) => <button key={item} onClick={() => setTab(item)} className={`relative whitespace-nowrap px-4 py-3.5 text-xs font-semibold ${tab === item ? "text-violet-600" : "text-slate-400 hover:text-slate-700"}`} role="tab" aria-selected={tab === item}>{item}{tab === item ? <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-violet-600" /> : null}</button>)}</div>
     <div className="px-5 py-5 lg:px-7">{tab === "Overview" ? <Overview campaign={campaign} events={events} progress={progress} /> : null}{tab === "Sequence" ? <Sequence campaign={campaign} events={events} /> : null}{tab === "Leads" ? <Leads events={events} leadEmails={leadEmails} /> : null}{tab === "Analytics" ? <CampaignAnalytics campaign={campaign} /> : null}{tab === "Activity" ? <Activity events={events} timezone={campaign.timezone} /> : null}{tab === "Settings" ? <Surface className="p-5" testId="campaign-settings"><div className="flex items-center gap-2"><Settings2 size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Campaign settings</h2></div><p className="mt-2 text-xs leading-relaxed text-slate-500">Timezone: {campaign.timezone}. Use Edit to change source rows, mappings, inboxes, or schedule. Sent, failed, and replied history is protected while future unsent emails are rebuilt.</p></Surface> : null}</div>
     {testOpen ? <TestEmailDialog campaignId={campaign.id} inboxCount={campaign.inbox_ids.length} onClose={() => setTestOpen(false)} /> : null}
-  </div>
+  </div>;
+}
 
 function Overview({ campaign, events, progress }: { campaign: CsvCampaign; events: ScheduledEmail[]; progress: number }) {
   const metrics = [{ label: "Total leads contacted", value: campaign.emails_sent ? campaign.total_leads : 0, icon: Users, tone: "text-violet-600" },{ label: "Emails sent", value: campaign.emails_sent, icon: Mail, tone: "text-violet-600" },{ label: "Replies", value: campaign.replies, icon: Send, tone: "text-cyan-600" },{ label: "Positive replies", value: campaign.positive_replies, icon: BarChart3, tone: "text-emerald-600" },{ label: "Failed", value: campaign.failed_emails, icon: Square, tone: "text-red-500" }];
