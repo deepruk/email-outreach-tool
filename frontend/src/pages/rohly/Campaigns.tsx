@@ -87,7 +87,7 @@ export default function Campaigns() {
     }
     if (!window.confirm(`Delete ${selected.length} selected campaign${selected.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
     try {
-      await Promise.all(selected.map((campaign) => apiDelete<void>(`/workspace/rohly-campaigns/${campaign.id}`)));
+      await Promise.all(selected.map((campaign) => apiDelete<void>(campaign.is_rohly ? `/workspace/rohly-campaigns/${campaign.id}` : `/csv/campaigns/${campaign.id}`)));
       setSelectedCampaigns([]);
       client.invalidateQueries({ queryKey: ["csv-campaigns"] });
       client.invalidateQueries({ queryKey: ["rohly-campaigns"] });
