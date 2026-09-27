@@ -89,11 +89,18 @@ async def use_recipient_list(source_id: str) -> dict:
     }
 
     duplicate_count = 0
+    invalid_count = 0
+    source_email_count = 0
     for source_row in row.get("rows", []):
-        email = _row_value(source_row, email_column).lower()
-        if not email or "@" not in email or email in seen:
+        email = _row_value(source_row, email_column).strip().lower()
+        if not email or "@" not in email:
+            invalid_count += 1
+            continue
+        if email in seen:
+            duplicate_count += 1
             continue
         seen.add(email)
+        source_email_count += 1
         if email in existing_emails or email in used_emails:
             duplicate_count += 1
             continue
@@ -122,8 +129,23 @@ async def use_recipient_list(source_id: str) -> dict:
         recipient_ids.append(recipient_id)
 
     if not recipient_ids:
+        if duplicate_count > 0:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"This list contains {duplicate_count} email address(es), but all of them are already "
+                    "in Rohly or have been used in a campaign. No new contacts were added."
+                ),
+            )
         available = ", ".join(columns[:12]) or "none"
-        raise HTTPException(status_code=422, detail=f"No valid email addresses were found in this list. Available columns: {available}")
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"No valid email addresses were found in the Email column. "
+                f"Checked {len(row.get('rows', []))} row(s); {invalid_count} row(s) had no valid email. "
+                f"Available columns: {available}"
+            ),
+        )
     return {
         "source_id": source_id,
         "filename": row["filename"],
@@ -131,4 +153,6 @@ async def use_recipient_list(source_id: str) -> dict:
         "count": len(recipient_ids),
         "duplicate_count": duplicate_count,
         "skipped_duplicates": duplicate_count,
+        "source_email_count": source_email_count,
+        "invalid_count": invalid_count,
     }
