@@ -12,6 +12,7 @@ from lib.db import db
 from routers.auth import require_user
 from models.auth import UserPublic
 from routers.scheduler import send_gmail_message
+from routers.open_tracking import tracked_send_gmail_message
 
 router = APIRouter(prefix="/workspace/rohly-campaigns", tags=["rohly-campaigns"], dependencies=[Depends(require_user)])
 
@@ -497,7 +498,7 @@ async def process_template_campaigns() -> None:
                 subject = _personalize(template.get("subject", ""), recipient)
                 body = _personalize(template.get("body", ""), recipient)
                 try:
-                    result = {"message_id": None, "thread_id": None} if inbox.get("is_mocked", True) else await send_gmail_message(item["inbox_id"], recipient["email"], subject, body)
+                    result = {"message_id": None, "thread_id": None} if inbox.get("is_mocked", True) else await tracked_send_gmail_message(item["id"], item["inbox_id"], recipient["email"], subject, body)
                     sent_at = datetime.now(timezone.utc)
                     await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "sent", "sent_at": sent_at, "subject": subject, "body": body, "message_id": result.get("message_id"), "thread_id": result.get("thread_id"), "error": None}})
                     await db.campaigns.update_one({"id": item["campaign_id"]}, {"$inc": {"sent_count": 1}})
