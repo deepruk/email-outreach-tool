@@ -16,7 +16,9 @@ export default function Campaigns() {
   const [tab, setTab] = useState<"all" | "running" | "paused" | "stopped">("all");
   const [search, setSearch] = useState("");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });\n  const draftsQuery = useQuery({ queryKey: ["rohly-drafts"], queryFn: () => apiGet<RohlyDraft[]>("/workspace/rohly-campaigns/drafts") });\n  const deleteDraft = useMutation({ mutationFn: (id: string) => apiDelete(`/workspace/rohly-campaigns/drafts/${id}`), onSuccess: () => { client.invalidateQueries({ queryKey: ["rohly-drafts"] }); toast.success("Draft deleted"); }, onError: () => toast.error("Unable to delete draft") });
+  const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
+  const draftsQuery = useQuery({ queryKey: ["rohly-drafts"], queryFn: () => apiGet<RohlyDraft[]>("/workspace/rohly-campaigns/drafts") });
+  const deleteDraft = useMutation({ mutationFn: (id: string) => apiDelete(`/workspace/rohly-campaigns/drafts/${id}`), onSuccess: () => { client.invalidateQueries({ queryKey: ["rohly-drafts"] }); toast.success("Draft deleted"); }, onError: () => toast.error("Unable to delete draft") });
 
   const status = useMutation({
     mutationFn: ({ id, value }: { id: string; value: "running" | "paused" | "stopped" }) =>
