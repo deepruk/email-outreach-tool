@@ -192,6 +192,16 @@ async def verify_email(input: VerifyEmailRequest, response: Response) -> UserPub
     await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}})
     await db.email_verifications.delete_many({"user_id": user["id"]})
     user["email_verified"] = True
+    # Accept any workspace invitations that were created before this user signed up.
+    pending = await db.workspace_invites.find({"email": user["email"].strip().lower(), "accepted_at": None}).to_list(100)
+    now = datetime.now(timezone.utc)
+    for invite in pending:
+        await db.workspace_memberships.update_one(
+            {"workspace_id": invite["workspace_id"], "user_id": user["id"]},
+            {"$setOnInsert": {"id": new_id(), "workspace_id": invite["workspace_id"], "user_id": user["id"], "role": invite["role"], "created_at": now}},
+            upsert=True,
+        )
+        await db.workspace_invites.update_one({"id": invite["id"]}, {"$set": {"accepted_at": now}})
     return await create_session(UserPublic(**user), response)
 
 
