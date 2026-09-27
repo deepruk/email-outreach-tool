@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Braces, CalendarClock, Check, FileSpreadsheet,
   FlaskConical, Mail, Plus, RefreshCw, Rocket, Settings2, Trash2, Upload, Users, X
 } from "lucide-react";
-import { apiGet, apiPost, apiUpload } from "@/lib/api";
+import { apiDelete, apiGet, apiPost, apiUpload } from "@/lib/api";
 import type { CsvSource, Inbox, Recipient, Template } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ type Step = {
 
 type RecipientList = { id: string; filename: string; row_count: number; columns: string[]; uploaded_at: string };
 type UseListResponse = { source_id: string; filename: string; recipient_ids: string[]; recipients?: Recipient[]; count: number; duplicate_count?: number; skipped_duplicates?: number };
-type CreatedCampaign = { id: string };
+type CreatedCampaign = { id: string };\ntype RohlyDraft = { id: string; name: string; active_step: number; selected_recipients: string[]; selected_inboxes: string[]; selected_lists: string[]; list_recipient_map: Record<string, string[]>; steps: Step[]; timezone: string; min_gap_minutes: number; max_gap_minutes: number; sending_window_start: string; sending_window_end: string; sending_days: number[]; stop_on_reply: boolean; follow_up_priority: number; distribution_mode: "pattern" | "random"; updated_at: string };
 
 const VARIABLES = ["{{first_name}}", "{{name}}", "{{email}}", "{{company}}", "{{job_title}}", "{{industry}}", "{{city}}", "{{country}}"];
 
@@ -75,8 +75,45 @@ export default function TemplateBuilder() {
   const [testPassed, setTestPassed] = useState(false);
   const [stopOnReply, setStopOnReply] = useState(true);
   const [followUpPriority, setFollowUpPriority] = useState(100);
-  const [distributionMode, setDistributionMode] = useState<"pattern" | "random">("pattern");
+  const [distributionMode, setDistributionMode] = useState<"pattern" | "random">("pattern");\n  const [draftId, setDraftId] = useState<string | null>(searchParams.get("draft"));\n  const [draftReady, setDraftReady] = useState(!searchParams.get("draft"));\n  const hydratedDraft = useRef(false);\n\n  const draftQuery = useQuery({\n    queryKey: ["rohly-draft", searchParams.get("draft")],\n    queryFn: () => apiGet<RohlyDraft>(`/workspace/rohly-campaigns/drafts/${searchParams.get("draft")}`),\n    enabled: Boolean(searchParams.get("draft")),\n  });
 
+  useEffect(() => {
+    const draft = draftQuery.data;
+    if (!draft || hydratedDraft.current) return;
+    hydratedDraft.current = true;
+    setDraftId(draft.id); setName(draft.name || "Rohly outreach campaign"); setActiveStep(draft.active_step ?? 0);
+    setSelectedRecipients(draft.selected_recipients ?? []); setSelectedInboxes(draft.selected_inboxes ?? []);
+    setSelectedLists(draft.selected_lists ?? []); setListRecipientMap(draft.list_recipient_map ?? {});
+    setSteps(draft.steps?.length ? draft.steps : [emptyStep(0)]); setTimezone(draft.timezone || "Asia/Kolkata");
+    setMinGapMinutes(draft.min_gap_minutes ?? 10); setMaxGapMinutes(draft.max_gap_minutes ?? 20);
+    setSendingWindowStart(draft.sending_window_start || "09:00"); setSendingWindowEnd(draft.sending_window_end || "18:00");
+    setSendingDays(draft.sending_days?.length ? draft.sending_days : [0, 1, 2, 3, 4]);
+    setStopOnReply(draft.stop_on_reply ?? true); setFollowUpPriority(draft.follow_up_priority ?? 100);
+    setDistributionMode(draft.distribution_mode === "random" ? "random" : "pattern"); setDraftReady(true);
+  }, [draftQuery.data]);
+
+  useEffect(() => {
+    if (searchParams.get("draft") && draftQuery.isError) { toast.error("This draft could not be loaded"); setDraftReady(true); }
+  }, [searchParams, draftQuery.isError]);
+
+  const saveDraftMutation = useMutation({
+    mutationFn: (payload: Omit<RohlyDraft, "id" | "updated_at"> & { id?: string }) => apiPost<RohlyDraft>("/workspace/rohly-campaigns/drafts", payload),
+    onSuccess: (draft) => {
+      if (!draftId) { setDraftId(draft.id); window.history.replaceState({}, "", `/campaigns/new/template?draft=${draft.id}`); }
+    },
+    onError: () => undefined,
+  });
+
+  useEffect(() => {
+    if (!draftReady || createMutation.isPending) return;
+    const timer = window.setTimeout(() => saveDraftMutation.mutate({
+      id: draftId || undefined, name, active_step: activeStep, selected_recipients: selectedRecipients, selected_inboxes: selectedInboxes,
+      selected_lists: selectedLists, list_recipient_map: listRecipientMap, steps, timezone, min_gap_minutes: minGapMinutes, max_gap_minutes: maxGapMinutes,
+      sending_window_start: sendingWindowStart, sending_window_end: sendingWindowEnd, sending_days: sendingDays, stop_on_reply: stopOnReply,
+      follow_up_priority: followUpPriority, distribution_mode: distributionMode,
+    }), 600);
+    return () => window.clearTimeout(timer);
+  }, [draftReady, draftId, name, activeStep, selectedRecipients, selectedInboxes, selectedLists, listRecipientMap, steps, timezone, minGapMinutes, maxGapMinutes, sendingWindowStart, sendingWindowEnd, sendingDays, stopOnReply, followUpPriority, distributionMode]);
   const recipientsQuery = useQuery({
     queryKey: ["rohly-campaign-recipients"],
     queryFn: () => apiGet<Recipient[]>("/workspace/rohly-campaigns/recipients"),
@@ -206,7 +243,8 @@ export default function TemplateBuilder() {
       }
       return created;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      if (draftId) await apiDelete(`/workspace/rohly-campaigns/drafts/${draftId}`).catch(() => undefined);
       toast.success("Rohly campaign launched");
       setTimeout(() => navigate("/campaigns"), 700);
     },
@@ -300,7 +338,7 @@ export default function TemplateBuilder() {
         </div>
         <div className="mt-2 flex items-center gap-3">
           <Input value={name} onChange={(event) => { setName(event.target.value); setTestPassed(false); }} className="h-8 w-72 border-0 bg-transparent px-0 text-[15px] font-bold shadow-none focus:ring-0" />
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-500">Draft</span>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">Draft{saveDraftMutation.isPending ? " • Saving…" : " • Auto-saved"}</span>
         </div>
         <p className="mt-1 text-xs text-slate-500">Configure your email campaign</p>
 
