@@ -95,7 +95,7 @@ function MetricMini({ label, value, tone }: { label:string; value:number; tone:"
 }
 
 function Leads({ events, leadEmails }: { events: ScheduledEmail[]; leadEmails: string[] }) {
-  return <Surface testId="campaign-leads-list"><div className="divide-y divide-slate-100">{leadEmails.map((email) => { const rows = events.filter((item) => item.recipient_email === email); return <div key={email} className="grid gap-3 px-4 py-3 text-xs sm:grid-cols-[1fr_1fr_120px]"><div><p className="font-semibold">{rows[0]?.first_name || email}</p><p className="mt-1 text-slate-400">{email}</p></div><p className="text-slate-500">{rows[0]?.company || "—"}</p><StatusBadge status={rows.some((item) => item.replied_at) ? "replied" : rows[0]?.status || "scheduled"} /></div>; })}</div></Surface>;
+  return <Surface testId="campaign-leads-list"><div className="divide-y divide-slate-100">{leadEmails.map((email) => { const rows = events.filter((item) => item.recipient_email === email); const opens = rows.reduce((sum, item) => sum + (item.open_count ?? 0), 0); return <div key={email} className="grid gap-3 px-4 py-3 text-xs sm:grid-cols-[1fr_1fr_90px_120px]"><div><p className="font-semibold">{rows[0]?.first_name || email}</p><p className="mt-1 text-slate-400">{email}</p></div><p className="text-slate-500">{rows[0]?.company || "—"}</p><p className="font-semibold text-slate-600">{opens} open{opens === 1 ? "" : "s"}</p><StatusBadge status={rows.some((item) => item.replied_at) ? "replied" : rows[0]?.status || "scheduled"} /></div>; })}</div></Surface>;
 }
 
 function Activity({ events, timezone }: { events: ScheduledEmail[]; timezone: string }) {
