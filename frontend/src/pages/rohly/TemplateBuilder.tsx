@@ -245,7 +245,6 @@ export default function TemplateBuilder() {
     if (minGapMinutes < 1 || maxGapMinutes < minGapMinutes) return "Enter a valid minimum/maximum email gap";
     if (sendingWindowStart >= sendingWindowEnd) return "Working-hours start must be before the end time";
     if (!sendingDays.length) return "Select at least one working day";
-    if (!testPassed) return "Run a successful test email before launching";
     return null;
   };
 
@@ -256,7 +255,6 @@ export default function TemplateBuilder() {
       if (!selectedRecipients.length) setActiveStep(0);
       else if (!steps.length || steps.some((step) => !step.subject.trim() || !step.body.trim())) setActiveStep(1);
       else if (!selectedInboxes.length) setActiveStep(2);
-      else if (!testPassed) setActiveStep(4);
       return;
     }
     createMutation.mutate();
@@ -854,8 +852,8 @@ function SettingsStep(props: {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <div className="flex items-center gap-2"><FlaskConical size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Test before launch</h2>{props.testPassed && <span className="ml-auto rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700"><Check size={11} className="mr-1 inline" /> Test passed</span>}</div>
-            <p className="mt-1 text-[11px] text-slate-500">Send the first email to yourself before the campaign can become active.</p>
+            <div className="flex items-center gap-2"><FlaskConical size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Test email (optional)</h2>{props.testPassed && <span className="ml-auto rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700"><Check size={11} className="mr-1 inline" /> Test passed</span>}</div>
+            <p className="mt-1 text-[11px] text-slate-500">Send a test email to yourself if you want to verify the message before launching. This is optional.</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input value={props.testEmail} onChange={(e) => props.setTestEmail(e.target.value)} placeholder="your@email.com" type="email" /><Button onClick={props.onTest} disabled={props.testPending || !props.selectedInboxes.length} className="gap-2 bg-violet-600 hover:bg-violet-700"><Mail size={14} />{props.testPending ? "Sending…" : "Send test email"}</Button></div>
             {!props.selectedInboxes.length && <p className="mt-2 text-[10px] text-amber-600">Select an email account before running the test.</p>}
           </div>
