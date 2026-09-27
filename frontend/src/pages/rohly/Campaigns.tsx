@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { MoreHorizontal, Pause, Play, Plus, Search, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api";
-import type { CsvCampaign } from "@/lib/types";
+import type { CampaignPerformance, CsvCampaign } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
@@ -16,8 +16,7 @@ export default function Campaigns() {
   const [search, setSearch] = useState("");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
-  const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
-  const rohlyQuery = useQuery({ queryKey: ["rohly-campaigns"], queryFn: () => apiGet<any[]>("/workspace/rohly-campaigns/campaigns") });
+  const query = useQuery({ queryKey: ["all-campaigns"], queryFn: () => apiGet<CampaignPerformance[]>("/product/campaigns") });
 
   const status = useMutation({
     mutationFn: ({ id, value }: { id: string; value: "running" | "paused" | "stopped" }) =>
@@ -41,7 +40,7 @@ export default function Campaigns() {
   });
 
   const toggleCampaign = (id: string) => setSelectedCampaigns((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
-  const toggleAll = () => setSelectedCampaigns((items) => items.length === (query.data ?? []).length ? [] : (query.data ?? []).map((campaign) => campaign.id));
+  const toggleAll = () => setSelectedCampaigns((items) => items.length === campaigns.length ? [] : campaigns.map((campaign) => campaign.id));
   const deleteSelected = async () => {
     const selected = (query.data ?? []).filter((campaign) => selectedCampaigns.includes(campaign.id));
     if (!selected.length) return;
@@ -55,7 +54,7 @@ export default function Campaigns() {
     } catch { toast.error("Unable to delete selected campaigns"); }
   };
 
-  const handleDelete = (campaign: CsvCampaign) => {
+  const handleDelete = (campaign: CampaignPerformance) => {
     if (campaign.status === "running") {
       toast.error("Pause or stop the campaign before deleting it");
       return;
@@ -65,21 +64,9 @@ export default function Campaigns() {
     }
   };
 
-  const rohlyCampaigns = (rohlyQuery.data ?? []).map((campaign) => ({
-    ...campaign,
-    source_filename: "Rohly Template",
-    total_leads: campaign.total_count ?? 0,
-    emails_sent: campaign.sent_count ?? 0,
-    failed_emails: campaign.failed_count ?? 0,
-    replies: 0,
-    positive_replies: 0,
-    steps: campaign.steps ?? [],
-    status: campaign.status === "active" ? "running" : campaign.status === "queued" ? "draft" : campaign.status,
-    is_rohly: true,
-  }));
-  const campaigns = ([...(query.data ?? []), ...rohlyCampaigns])
+  const campaigns = (query.data ?? [])
     .filter((campaign) => tab === "all" || (tab === "running" ? campaign.status === "running" : tab === "paused" ? campaign.status === "paused" : ["stopped", "completed"].includes(campaign.status)))
-    .filter((campaign) => campaign.name.toLowerCase().includes(search.toLowerCase()) || campaign.source_filename.toLowerCase().includes(search.toLowerCase()));
+    .filter((campaign) => campaign.name.toLowerCase().includes(search.toLowerCase()) || campaign.source.toLowerCase().includes(search.toLowerCase()));
 
   const counts = {
     all: campaigns.length,
@@ -133,11 +120,11 @@ export default function Campaigns() {
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-[0_1px_5px_rgba(15,23,42,0.04)]">
-          {query.isLoading ? <SkeletonRows rows={6} /> : campaigns.length ? (
+          {query.isLoading ? <SkeletonRows rows={6} /> : query.isError ? <EmptyState title="Unable to load campaigns" description="The campaign service returned an error. Refresh the page and try again." action={<Button onClick={() => query.refetch()} className="mt-4 bg-violet-600 hover:bg-violet-700">Retry</Button>} /> : campaigns.length ? (
             <table className="w-full min-w-[1260px] text-left">
               <thead className="bg-slate-50/90 text-[11px] font-semibold text-slate-500">
                 <tr>
-                  <th className="w-10 px-4 py-4"><input type="checkbox" aria-label="Select all campaigns" checked={selectedCampaigns.length > 0 && selectedCampaigns.length === (query.data ?? []).length} onChange={toggleAll} /></th>
+                  <th className="w-10 px-4 py-4"><input type="checkbox" aria-label="Select all campaigns" checked={selectedCampaigns.length > 0 && selectedCampaigns.length === campaigns.length} onChange={toggleAll} /></th>
                   <th className="min-w-[360px] px-4 py-4">Campaign name</th>
                   <th className="px-4 py-4 text-violet-600">♧ Leads ⓘ</th>
                   <th className="px-4 py-4 text-violet-600">✉ Sent ⓘ</th>
