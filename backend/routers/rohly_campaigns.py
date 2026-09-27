@@ -277,9 +277,15 @@ async def create_campaign(input: CampaignCreate) -> dict:
             "launched_at": None,
         }
         try:
-            await db.campaigns.insert_one(campaign)
+            result = await db.campaigns.insert_one(campaign)
+            if not result.acknowledged:
+                raise RuntimeError("MongoDB did not acknowledge the campaign insert")
+        except HTTPException:
+            raise
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Could not create campaign record: {str(exc)[:400]}") from exc
+            import logging
+            logging.getLogger(__name__).exception("Rohly campaign insert failed")
+            raise HTTPException(status_code=500, detail=f"Could not create campaign record: {type(exc).__name__}: {str(exc)[:500]}") from exc
         return campaign
     except HTTPException:
         raise
