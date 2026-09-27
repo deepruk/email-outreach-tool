@@ -163,14 +163,9 @@ async def signup(input: SignupRequest) -> dict:
         raise HTTPException(status_code=409, detail="An account with this email already exists")
     user = UserRecord(id=new_id(), email=email, name=input.name.strip(), role="user",
                       created_at=datetime.now(timezone.utc), password_hash=hash_password(input.password),
-                      email_verified=False)
+                      email_verified=True)
     await db.users.insert_one(user.model_dump())
-    try:
-        await _create_verification(user.id, user.email, user.name)
-    except Exception as exc:
-        # Keep the unverified account instead of destroying signup state when the mail provider is temporarily unavailable.
-        raise HTTPException(status_code=503, detail="Your account was created, but we could not send the verification email. Use Resend verification after email delivery is restored.") from exc
-    return {"verification_required": True, "email": user.email}
+    return {"verification_required": False, "email": user.email}
 
 
 @router.post("/login", response_model=UserPublic)
