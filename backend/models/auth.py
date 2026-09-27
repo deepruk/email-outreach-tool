@@ -2,7 +2,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from models.scheduler import new_id
 
 
 class UserPublic(BaseModel):
@@ -20,6 +19,12 @@ class UserRecord(UserPublic):
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=8, max_length=256)
+
+
+class SignupRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=10, max_length=256)
 
 
 class ProfileUpdate(BaseModel):
