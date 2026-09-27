@@ -5,6 +5,8 @@ import { MoreHorizontal, Pause, Play, Plus, Search, Square, Trash2 } from "lucid
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api";
 import type { CsvCampaign } from "@/lib/types";
+
+type CampaignRow = CsvCampaign & { is_rohly?: boolean };
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
@@ -51,7 +53,7 @@ export default function Campaigns() {
     }
   };
 
-  const rohlyCampaigns = (rohlyQuery.data ?? []).map((campaign) => ({
+  const rohlyCampaigns: CampaignRow[] = (rohlyQuery.data ?? []).map((campaign) => ({
     id: campaign.id,
     name: campaign.name,
     source_filename: "Rohly Template",
@@ -65,7 +67,7 @@ export default function Campaigns() {
     created_at: campaign.created_at,
     launched_at: campaign.launched_at,
     is_rohly: true,
-  } as unknown as CsvCampaign));
+  } as CampaignRow));
 
 
   const toggleCampaignSelection = (id: string) => {
@@ -99,7 +101,7 @@ export default function Campaigns() {
     }
   };
 
-  const campaigns = ([...(query.data ?? []), ...rohlyCampaigns])
+  const campaigns: CampaignRow[] = ([...(query.data ?? []), ...rohlyCampaigns])
     .filter((campaign) => tab === "all" || (tab === "running" ? campaign.status === "running" : tab === "paused" ? campaign.status === "paused" : ["stopped", "completed"].includes(campaign.status)))
     .filter((campaign) => campaign.name.toLowerCase().includes(search.toLowerCase()) || campaign.source_filename.toLowerCase().includes(search.toLowerCase()));
 
