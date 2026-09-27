@@ -138,7 +138,7 @@ export default function Campaigns() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {campaigns.map((campaign) => {
-                  const totalSends = Math.max(1, campaign.total_leads * Math.max(1, campaign.steps.length));
+                  const totalSends = Math.max(1, campaign.leads * Math.max(1, campaign.steps_count));
                   const progress = Math.min(100, Math.round((campaign.emails_sent / totalSends) * 100));
                   const replyRate = campaign.emails_sent ? (campaign.replies / campaign.emails_sent) * 100 : 0;
                   return (
@@ -151,17 +151,17 @@ export default function Campaigns() {
                           </div>
                           <div className="min-w-0">
                             <Link to={`/campaigns/${campaign.id}`} className="block truncate text-[13px] font-semibold text-slate-900 hover:text-violet-600">{campaign.name}</Link>
-                            <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400"><span>{campaign.steps.length} sequences</span><span>•</span><span>Created {new Date(campaign.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span><span>•</span><StatusBadge status={campaign.status} /></div>
+                            <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400"><span>{campaign.steps_count} sequences</span><span>•</span><span>Created {new Date(campaign.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span><span>•</span><StatusBadge status={campaign.status} /></div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-[15px] font-medium text-violet-600">{campaign.total_leads}</td>
-                      <td className="px-4 py-4 text-[15px] font-medium text-violet-600">{campaign.emails_sent}</td>
+                      <td className="px-4 py-4 text-[15px] font-medium text-violet-600">{campaign.leads}</td>
+                      <td className="px-4 py-4 text-[15px] font-medium text-violet-600">{campaign.sent}</td>
                       <td className="px-4 py-4 text-slate-400">—</td>
                       <td className="px-4 py-4 text-slate-400">—</td>
                       <td className="px-4 py-4"><span className="text-[15px] font-medium text-cyan-600">{campaign.replies}</span><span className="ml-1 text-[10px] text-slate-400">{replyRate.toFixed(2)}%</span></td>
                       <td className="px-4 py-4 text-[15px] font-medium text-green-600">{campaign.positive_replies}</td>
-                      <td className="px-4 py-4"><span className="text-[15px] font-medium text-red-500">{campaign.failed_emails}</span></td>
+                      <td className="px-4 py-4"><span className="text-[15px] font-medium text-red-500">{campaign.failed}</span></td>
                       <td className="relative px-4 py-4">
                         <div className="flex justify-end gap-1">
                           <Link to={`/campaigns/${campaign.id}`} className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Open campaign">↗</Link>
