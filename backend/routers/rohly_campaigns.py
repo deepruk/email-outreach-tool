@@ -207,60 +207,84 @@ async def test_run(input: TestRunRequest) -> dict:
 
 @router.post("")
 async def create_campaign(input: CampaignCreate) -> dict:
-    if input.min_gap_minutes > input.max_gap_minutes:
-        raise HTTPException(status_code=422, detail="Minimum gap must be less than maximum gap")
     try:
-        ZoneInfo(input.timezone)
+        if input.min_gap_minutes > input.max_gap_minutes:
+            raise HTTPException(status_code=422, detail="Minimum gap must be less than maximum gap")
+        try:
+            ZoneInfo(input.timezone)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail="Invalid timezone") from exc
+        if len(set(input.sending_days)) != len(input.sending_days) or any(day < 0 or day > 6 for day in input.sending_days):
+            raise HTTPException(status_code=422, detail="Working days must be unique values from 0 to 6")
+        _clock(input.sending_window_start)
+        _clock(input.sending_window_end)
+
+        inbox_ids = list(dict.fromkeys(input.inbox_ids))
+        recipient_ids = list(dict.fromkeys(input.recipient_ids))
+        template_ids = [step.template_id for step in input.steps]
+
+        try:
+            inboxes = await db.inboxes.find({"id": {"$in": inbox_ids}, "status": "connected"}).to_list(1000)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read sending inboxes: {str(exc)[:300]}") from exc
+        if len(inboxes) != len(inbox_ids):
+            missing = sorted(set(inbox_ids) - {row.get("id") for row in inboxes})
+            raise HTTPException(status_code=404, detail=f"One or more connected inboxes were not found: {', '.join(missing[:3])}")
+
+        try:
+            recipients = await db.recipients.find({"id": {"$in": recipient_ids}}).to_list(5000)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read campaign leads: {str(exc)[:300]}") from exc
+        if len(recipients) != len(recipient_ids):
+            missing = sorted(set(recipient_ids) - {row.get("id") for row in recipients})
+            raise HTTPException(status_code=404, detail=f"One or more recipients were not found: {', '.join(missing[:3])}")
+
+        try:
+            templates = await db.templates.find({"id": {"$in": template_ids}}).to_list(1000)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read sequence templates: {str(exc)[:300]}") from exc
+        found = {row.get("id") for row in templates}
+        missing_templates = [template_id for template_id in template_ids if template_id not in found]
+        if missing_templates:
+            raise HTTPException(status_code=404, detail=f"One or more selected templates were not found: {', '.join(missing_templates[:3])}")
+
+        campaign_id = uuid.uuid4().hex
+        campaign = {
+            "id": campaign_id,
+            "name": input.name.strip(),
+            "campaign_type": "rohly_template",
+            "source": "Rohly Template",
+            "inbox_id": inbox_ids[0],
+            "inbox_ids": inbox_ids,
+            "template_id": template_ids[0],
+            "recipient_ids": recipient_ids,
+            "steps": [step.model_dump() for step in input.steps],
+            "total_count": len(recipient_ids),
+            "sent_count": 0,
+            "failed_count": 0,
+            "status": "queued",
+            "min_gap_minutes": input.min_gap_minutes,
+            "max_gap_minutes": input.max_gap_minutes,
+            "sending_window_start": input.sending_window_start,
+            "sending_window_end": input.sending_window_end,
+            "sending_days": input.sending_days,
+            "timezone": input.timezone,
+            "stop_on_reply": input.stop_on_reply,
+            "follow_up_priority": input.follow_up_priority,
+            "distribution_mode": input.distribution_mode,
+            "next_send_at": None,
+            "created_at": datetime.now(timezone.utc),
+            "launched_at": None,
+        }
+        try:
+            await db.campaigns.insert_one(campaign)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not create campaign record: {str(exc)[:400]}") from exc
+        return campaign
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=422, detail="Invalid timezone") from exc
-    if len(set(input.sending_days)) != len(input.sending_days) or any(day < 0 or day > 6 for day in input.sending_days):
-        raise HTTPException(status_code=422, detail="Working days must be unique values from 0 to 6")
-    _clock(input.sending_window_start)
-    _clock(input.sending_window_end)
-    inboxes = await db.inboxes.find({"id": {"$in": input.inbox_ids}, "status": "connected"}).to_list(1000)
-    if len(inboxes) != len(set(input.inbox_ids)):
-        raise HTTPException(status_code=404, detail="One or more connected inboxes were not found")
-    recipients = await db.recipients.find({"id": {"$in": input.recipient_ids}}).to_list(5000)
-    if len(recipients) != len(set(input.recipient_ids)):
-        raise HTTPException(status_code=404, detail="One or more recipients were not found")
-    template_ids = [step.template_id for step in input.steps]
-    templates = await db.templates.find({"id": {"$in": template_ids}}).to_list(1000)
-    found = {row["id"] for row in templates}
-    if any(template_id not in found for template_id in template_ids):
-        raise HTTPException(status_code=404, detail="One or more selected templates were not found")
-    campaign_id = uuid.uuid4().hex
-    campaign = {
-        "id": campaign_id,
-        "name": input.name,
-        "campaign_type": "rohly_template",
-        "source": "Rohly Template",
-        "inbox_id": input.inbox_ids[0],
-        "inbox_ids": input.inbox_ids,
-        "template_id": input.steps[0].template_id,
-        "recipient_ids": input.recipient_ids,
-        "steps": [step.model_dump() for step in input.steps],
-        "total_count": len(input.recipient_ids),
-        "sent_count": 0,
-        "failed_count": 0,
-        "status": "queued",
-        "min_gap_minutes": input.min_gap_minutes,
-        "max_gap_minutes": input.max_gap_minutes,
-        "sending_window_start": input.sending_window_start,
-        "sending_window_end": input.sending_window_end,
-        "sending_days": input.sending_days,
-        "timezone": input.timezone,
-        "stop_on_reply": input.stop_on_reply,
-        "follow_up_priority": input.follow_up_priority,
-        "distribution_mode": input.distribution_mode,
-        "next_send_at": None,
-        "created_at": datetime.now(timezone.utc),
-        "launched_at": None,
-    }
-    try:
-        await db.campaigns.insert_one(campaign)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not create campaign: {str(exc)[:240]}") from exc
-    return campaign
+        raise HTTPException(status_code=500, detail=f"Could not create campaign: {type(exc).__name__}: {str(exc)[:400]}") from exc
 
 
 @router.post("/{campaign_id}/launch")
