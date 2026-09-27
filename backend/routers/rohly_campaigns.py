@@ -201,8 +201,8 @@ async def list_drafts(user: UserPublic = Depends(require_user)) -> list[dict]:
 
 
 @router.get("/drafts/{draft_id}")
-async def get_draft(draft_id: str) -> dict:
-    draft = await db.rohly_drafts.find_one({"id": draft_id})
+async def get_draft(draft_id: str, user: UserPublic = Depends(require_user)) -> dict:
+    draft = await db.rohly_drafts.find_one({"id": draft_id, "user_id": user.id})
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     draft.pop("_id", None)
@@ -245,18 +245,18 @@ async def save_draft(input: DraftCreate, user: UserPublic = Depends(require_user
 
 
 @router.delete("/drafts/{draft_id}", status_code=204)
-async def delete_draft(draft_id: str):
-    await db.rohly_drafts.delete_one({"id": draft_id})
+async def delete_draft(draft_id: str, user: UserPublic = Depends(require_user)):
+    await db.rohly_drafts.delete_one({"id": draft_id, "user_id": user.id})
     return None
 
 
 @router.post("/test-run")
-async def test_run(input: TestRunRequest) -> dict:
+async def test_run(input: TestRunRequest, user: UserPublic = Depends(require_user)) -> dict:
     recipient_email = input.recipient_email.strip()
     if "@" not in recipient_email or recipient_email.startswith("@") or recipient_email.endswith("@"):
         raise HTTPException(status_code=422, detail="Enter a valid test recipient email")
 
-    inbox = await db.inboxes.find_one({"id": input.inbox_id, "status": "connected"})
+    inbox = await db.inboxes.find_one({"id": input.inbox_id, "status": "connected", "user_id": user.id})
     if not inbox:
         raise HTTPException(status_code=404, detail="Connected sending inbox not found")
 
@@ -280,6 +280,7 @@ async def test_run(input: TestRunRequest) -> dict:
         "detail": f"Test sent to {recipient_email} via {inbox.get('email', '')}",
         "tone": "success",
         "time": datetime.now(timezone.utc),
+        "user_id": user.id,
     })
     return {
         "success": True,
@@ -317,7 +318,7 @@ async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(requ
             raise HTTPException(status_code=404, detail=f"One or more connected inboxes were not found: {', '.join(missing[:3])}")
 
         try:
-            recipients = await db.recipients.find({"id": {"$in": recipient_ids}}).to_list(5000)
+            recipients = await db.recipients.find({"id": {"$in": recipient_ids}, "user_id": user.id}).to_list(5000)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Could not read campaign leads: {str(exc)[:300]}") from exc
         if len(recipients) != len(recipient_ids):
@@ -438,8 +439,8 @@ async def delete_campaign(campaign_id: str, user: UserPublic = Depends(require_u
         raise HTTPException(status_code=404, detail="Rohly campaign not found")
     if campaign.get("status") == "active":
         raise HTTPException(status_code=409, detail="Pause or stop the campaign before deleting it")
-    await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "source_type": "rohly_template"})
-    await db.campaigns.delete_one({"id": campaign_id})
+    await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id})
+    await db.campaigns.delete_one({"id": campaign_id, "user_id": user.id})
     return None
 
 
