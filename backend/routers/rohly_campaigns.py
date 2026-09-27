@@ -30,6 +30,19 @@ class TestRunRequest(BaseModel):
     body: str
 
 
+class CampaignStatusRequest(BaseModel):
+    status: str
+
+
+class CampaignScheduleUpdate(BaseModel):
+    timezone: str
+    min_gap_minutes: int = Field(default=10, ge=1, le=1440)
+    max_gap_minutes: int = Field(default=20, ge=1, le=1440)
+    sending_window_start: str
+    sending_window_end: str
+    sending_days: list[int]
+
+
 class CampaignCreate(BaseModel):
     name: str
     inbox_ids: list[str] = Field(min_length=1)
@@ -422,6 +435,77 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
     # MongoDB adds an ObjectId _id to fetched documents; never expose it through JSON.
     response_campaign.pop("_id", None)
     return response_campaign
+
+
+@router.patch("/{campaign_id}/status")
+async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest, user: UserPublic = Depends(require_user)) -> dict:
+    campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Rohly campaign not found")
+    if input.status not in {"active", "paused", "stopped"}:
+        raise HTTPException(status_code=422, detail="Status must be active, paused, or stopped")
+    if campaign.get("status") == "completed":
+        raise HTTPException(status_code=409, detail="Completed campaigns cannot be resumed")
+    await db.campaigns.update_one({"id": campaign_id, "user_id": user.id}, {"$set": {"status": input.status}})
+    if input.status == "stopped":
+        await db.scheduled_emails.update_many(
+            {"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id, "status": "scheduled"},
+            {"$set": {"status": "cancelled", "error": "Campaign stopped by user"}},
+        )
+    campaign["status"] = input.status
+    campaign.pop("_id", None)
+    return campaign
+
+
+@router.patch("/{campaign_id}/schedule")
+async def update_campaign_schedule(campaign_id: str, input: CampaignScheduleUpdate, user: UserPublic = Depends(require_user)) -> dict:
+    campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Rohly campaign not found")
+    if campaign.get("status") in {"stopped", "completed"}:
+        raise HTTPException(status_code=409, detail="Stopped or completed campaigns cannot be rescheduled")
+    if input.min_gap_minutes > input.max_gap_minutes:
+        raise HTTPException(status_code=422, detail="Minimum gap cannot exceed maximum gap")
+    try:
+        ZoneInfo(input.timezone)
+        _clock(input.sending_window_start)
+        _clock(input.sending_window_end)
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(status_code=422, detail="Choose a valid timezone") from exc
+    if _clock(input.sending_window_start) >= _clock(input.sending_window_end):
+        raise HTTPException(status_code=422, detail="Working-hours start must be before end")
+    if not input.sending_days or any(day < 0 or day > 6 for day in input.sending_days):
+        raise HTTPException(status_code=422, detail="Select valid working days")
+
+    recipients = await db.recipients.find({"id": {"$in": campaign["recipient_ids"]}, "user_id": user.id}).to_list(5000)
+    protected = await db.scheduled_emails.find({
+        "campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id,
+        "$or": [{"status": {"$in": ["sent", "failed", "sending"]}}, {"replied_at": {"$ne": None}}],
+    }).to_list(10000)
+    protected_keys = {(row.get("recipient_id"), row.get("step_index")) for row in protected}
+    next_campaign = {**campaign, **input.model_dump()}
+    events = _schedule_events(
+        campaign_id, campaign["name"], recipients, campaign["inbox_ids"], campaign["steps"], input.timezone,
+        input.min_gap_minutes, input.max_gap_minutes, input.sending_window_start, input.sending_window_end,
+        input.sending_days, campaign.get("distribution_mode", "pattern"),
+    )
+    future = [event for event in events if (event.get("recipient_id"), event.get("step_index")) not in protected_keys]
+    await db.scheduled_emails.delete_many({
+        "campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id,
+        "status": {"$in": ["scheduled", "cancelled"]},
+    })
+    for event in future:
+        event["user_id"] = user.id
+    if future:
+        await db.scheduled_emails.insert_many(future)
+    first_at = min((event["scheduled_at"] for event in future), default=None)
+    updates = {**input.model_dump(), "next_send_at": first_at, "emails_scheduled": len(future)}
+    await db.campaigns.update_one({"id": campaign_id, "user_id": user.id}, {"$set": updates})
+    next_campaign.update(updates)
+    next_campaign.pop("_id", None)
+    return next_campaign
 
 
 @router.get("/{campaign_id}/activity")
