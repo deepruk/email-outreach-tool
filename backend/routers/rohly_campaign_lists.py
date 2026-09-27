@@ -71,11 +71,32 @@ async def use_recipient_list(source_id: str) -> dict:
     recipient_ids: list[str] = []
     now = datetime.now(timezone.utc)
     seen: set[str] = set()
+
+    existing_rows = await db.recipients.find({}, {"email": 1, "_id": 0}).to_list(100000)
+    existing_emails = {
+        str(item.get("email") or "").strip().lower()
+        for item in existing_rows
+        if item.get("email")
+    }
+    used_rows = await db.scheduled_emails.find(
+        {},
+        {"recipient_email": 1, "_id": 0},
+    ).to_list(100000)
+    used_emails = {
+        str(item.get("recipient_email") or "").strip().lower()
+        for item in used_rows
+        if item.get("recipient_email")
+    }
+
+    duplicate_count = 0
     for source_row in row.get("rows", []):
         email = _row_value(source_row, email_column).lower()
         if not email or "@" not in email or email in seen:
             continue
         seen.add(email)
+        if email in existing_emails or email in used_emails:
+            duplicate_count += 1
+            continue
         name = _row_value(source_row, name_column)
         if not name:
             first = _row_value(source_row, first_column)
@@ -103,4 +124,11 @@ async def use_recipient_list(source_id: str) -> dict:
     if not recipient_ids:
         available = ", ".join(columns[:12]) or "none"
         raise HTTPException(status_code=422, detail=f"No valid email addresses were found in this list. Available columns: {available}")
-    return {"source_id": source_id, "filename": row["filename"], "recipient_ids": recipient_ids, "count": len(recipient_ids)}
+    return {
+        "source_id": source_id,
+        "filename": row["filename"],
+        "recipient_ids": recipient_ids,
+        "count": len(recipient_ids),
+        "duplicate_count": duplicate_count,
+        "skipped_duplicates": duplicate_count,
+    }
