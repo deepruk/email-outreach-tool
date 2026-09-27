@@ -243,7 +243,7 @@ async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate, user: 
     return scheduled, preview.skipped_count
 
 
-async def calculate_edit_impact(campaign_id: str, proposed: list[ScheduledEmail], skipped: int) -> CampaignEditImpact:
+async def calculate_edit_impact(campaign_id: str, proposed: list[ScheduledEmail], skipped: int, user: UserPublic) -> CampaignEditImpact:
     existing = await db.scheduled_emails.find({"campaign_id": campaign_id, "user_id": user.id}).to_list(100000)
     protected_rows = [row for row in existing if row.get("status") in {"sent", "failed"} or row.get("replied_at")]
     future_rows = [row for row in existing if row.get("status") == "scheduled" and not row.get("replied_at")]
@@ -394,7 +394,7 @@ async def preview_edit_impact(campaign_id: str, input: CsvCampaignCreate, user: 
     if not await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id}):
         raise HTTPException(status_code=404, detail="CSV campaign not found")
     proposed, skipped = await build_edit_schedule(campaign_id, input, user)
-    return await calculate_edit_impact(campaign_id, proposed, skipped)
+    return await calculate_edit_impact(campaign_id, proposed, skipped, user)
 
 
 @router.post("/campaigns/{campaign_id}/test-send", response_model=TestEmailResponse)
@@ -460,7 +460,7 @@ async def edit_campaign(campaign_id: str, input: CsvCampaignCreate, user: UserPu
         raise HTTPException(status_code=404, detail="CSV source not found")
     await db.csv_campaigns.update_one({"id": campaign_id}, {"$set": {"edit_lock": True}})
     try:
-        proposed, skipped = await build_edit_schedule(campaign_id, input)
+        proposed, skipped = await build_edit_schedule(campaign_id, input, user)
         impact = await calculate_edit_impact(campaign_id, proposed, skipped)
         protected = await db.scheduled_emails.find({
             "campaign_id": campaign_id,
