@@ -286,6 +286,9 @@ async def create_campaign(input: CampaignCreate) -> dict:
             import logging
             logging.getLogger(__name__).exception("Rohly campaign insert failed")
             raise HTTPException(status_code=500, detail=f"Could not create campaign record: {type(exc).__name__}: {str(exc)[:500]}") from exc
+        # Motor/PyMongo adds an ObjectId _id to the inserted dict in-place.
+        # Remove it before returning because FastAPI cannot JSON-encode ObjectId.
+        campaign.pop("_id", None)
         return campaign
     except HTTPException:
         raise
@@ -326,7 +329,10 @@ async def launch_campaign(campaign_id: str) -> dict:
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not activate campaign: {str(exc)[:400]}") from exc
-    return {**campaign, "status": "active", "launched_at": now, "next_send_at": first_at, "emails_scheduled": len(events)}
+    response_campaign = {**campaign, "status": "active", "launched_at": now, "next_send_at": first_at, "emails_scheduled": len(events)}
+    # MongoDB adds an ObjectId _id to fetched documents; never expose it through JSON.
+    response_campaign.pop("_id", None)
+    return response_campaign
 
 
 @router.delete("/{campaign_id}", status_code=204)
