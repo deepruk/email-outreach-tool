@@ -9,7 +9,8 @@ export class ApiError extends Error {
   body: unknown;
 
   constructor(status: number, body: unknown) {
-    super(`request failed with ${status}`);
+    const detail = typeof body === "object" && body !== null && "detail" in body ? String((body as { detail?: unknown }).detail ?? "") : "";
+    super(detail ? `request failed with ${status}: ${detail}` : `request failed with ${status}`);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
