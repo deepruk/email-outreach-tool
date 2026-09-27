@@ -30,6 +30,8 @@ class CampaignPerformance(BaseModel):
     positive_replies: int
     reply_rate: float
     progress: float
+    failed: int = 0
+    steps_count: int = 0
     created_at: datetime
 
 
