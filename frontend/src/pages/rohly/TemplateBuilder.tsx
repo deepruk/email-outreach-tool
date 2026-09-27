@@ -20,6 +20,7 @@ type Step = {
   template_id?: string;
   variant_subject?: string;
   variant_body?: string;
+  condition?: "always" | "opened" | "clicked" | "not_opened" | "not_clicked";
 };
 
 type RecipientList = { id: string; filename: string; row_count: number; columns: string[]; uploaded_at: string };
@@ -51,6 +52,7 @@ const emptyStep = (index: number): Step => ({
   template_name: index === 0 ? "Initial outreach" : `Follow-up ${index}`,
   subject: "",
   body: "",
+  condition: "always",
 });
 
 const stepLabels = ["Lead List", "Sequence", "Email Accounts", "SubSequences", "Settings"];
@@ -241,6 +243,7 @@ export default function TemplateBuilder() {
             label: step.label,
             delay_days: step.delay_days,
             variant_template_ids: variantTemplateIds[index] || [],
+            condition: step.condition || "always",
           })),
           timezone,
           min_gap_minutes: minGapMinutes,
@@ -770,6 +773,11 @@ function SequenceStep(props: {
               {safeIndex > 0 && (
                 <label className="text-xs font-semibold">Delay after previous email (days)
                   <Input type="number" min={1} value={selectedStep.delay_days} onChange={(e) => props.onUpdate(safeIndex, { delay_days: Number(e.target.value) })} className="mt-1" />
+                </label>
+              )}
+              {safeIndex > 0 && (
+                <label className="text-xs font-semibold">Send this follow-up when
+                  <select value={selectedStep.condition || "always"} onChange={(e)=>props.onUpdate(safeIndex,{condition:e.target.value as Step["condition"]})} className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs"><option value="always">Always</option><option value="opened">Previous email was opened</option><option value="clicked">Previous email was clicked</option><option value="not_opened">Previous email was not opened</option><option value="not_clicked">Previous email was not clicked</option></select>
                 </label>
               )}
             </div>
