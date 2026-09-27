@@ -36,12 +36,12 @@ def aware(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
-async def chart_for_days(days: int) -> list[ChartPoint]:
+async def chart_for_days(days: int, user_id: str) -> list[ChartPoint]:
     start = datetime.now(timezone.utc) - timedelta(days=days - 1)
     scheduled = await db.scheduled_emails.find(
-        {"sent_at": {"$gte": start}, "status": "sent"}, {"sent_at": 1}
+        {"user_id": user_id, "sent_at": {"$gte": start}, "status": "sent"}, {"sent_at": 1}
     ).to_list(100000)
-    replies = await db.replies.find({"received_at": {"$gte": start}}).to_list(100000)
+    replies = await db.replies.find({"user_id": user_id, "received_at": {"$gte": start}}).to_list(100000)
     points: dict[str, dict[str, int]] = {}
     for offset in range(days):
         key = (start + timedelta(days=offset)).date().isoformat()
@@ -82,23 +82,23 @@ def performance(row: dict) -> CampaignPerformance:
 
 
 @router.get("/dashboard", response_model=CommandCenter)
-async def dashboard() -> CommandCenter:
+async def dashboard(user: UserPublic = Depends(require_user)) -> CommandCenter:
     now = datetime.now(timezone.utc)
     current_start = now - timedelta(days=30)
     previous_start = current_start - timedelta(days=30)
-    current_sent = await db.scheduled_emails.count_documents({"status": "sent", "sent_at": {"$gte": current_start}})
-    previous_sent = await db.scheduled_emails.count_documents({"status": "sent", "sent_at": {"$gte": previous_start, "$lt": current_start}})
-    current_replies = await db.replies.count_documents({"received_at": {"$gte": current_start}})
-    previous_replies = await db.replies.count_documents({"received_at": {"$gte": previous_start, "$lt": current_start}})
-    positives = await db.replies.count_documents({"received_at": {"$gte": current_start}, "sentiment": "positive"})
-    previous_positives = await db.replies.count_documents({"received_at": {"$gte": previous_start, "$lt": current_start}, "sentiment": "positive"})
-    csv_campaigns = await db.csv_campaigns.find().sort("created_at", -1).to_list(100)
-    rohly_campaigns = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(100)
+    current_sent = await db.scheduled_emails.count_documents({"user_id": user.id, "status": "sent", "sent_at": {"$gte": current_start}})
+    previous_sent = await db.scheduled_emails.count_documents({"user_id": user.id, "status": "sent", "sent_at": {"$gte": previous_start, "$lt": current_start}})
+    current_replies = await db.replies.count_documents({"user_id": user.id, "received_at": {"$gte": current_start}})
+    previous_replies = await db.replies.count_documents({"user_id": user.id, "received_at": {"$gte": previous_start, "$lt": current_start}})
+    positives = await db.replies.count_documents({"user_id": user.id, "received_at": {"$gte": current_start}, "sentiment": "positive"})
+    previous_positives = await db.replies.count_documents({"user_id": user.id, "received_at": {"$gte": previous_start, "$lt": current_start}, "sentiment": "positive"})
+    csv_campaigns = await db.csv_campaigns.find({"user_id": user.id}).sort("created_at", -1).to_list(100)
+    rohly_campaigns = await db.campaigns.find({"campaign_type": "rohly_template", "user_id": user.id}).sort("created_at", -1).to_list(100)
     campaigns = csv_campaigns + rohly_campaigns
     active = sum(1 for row in campaigns if str(row.get("status") or "").strip().lower() in {"running", "active"})
-    scheduled = await db.scheduled_emails.count_documents({"status": "scheduled"})
-    failed = await db.scheduled_emails.count_documents({"status": "failed"})
-    attention = await db.inboxes.count_documents({"$or": [{"status": {"$ne": "connected"}}, {"reply_tracking_status": {"$ne": "active"}}]})
+    scheduled = await db.scheduled_emails.count_documents({"user_id": user.id, "status": "scheduled"})
+    failed = await db.scheduled_emails.count_documents({"user_id": user.id, "status": "failed"})
+    attention = await db.inboxes.count_documents({"user_id": user.id, "$or": [{"status": {"$ne": "connected"}}, {"reply_tracking_status": {"$ne": "active"}}]})
 
     def change(current: int, previous: int) -> float | None:
         return round(((current - previous) / previous) * 100, 1) if previous else None
@@ -111,14 +111,14 @@ async def dashboard() -> CommandCenter:
         scheduled=scheduled,
         failed=failed,
         inboxes_needing_attention=attention,
-        chart=await chart_for_days(14),
+        chart=await chart_for_days(14, user.id),
         campaigns=[performance(row) for row in sorted(campaigns, key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)[:8]],
     )
 
 
 @router.get("/campaigns", response_model=list[CampaignPerformance])
-async def campaigns() -> list[CampaignPerformance]:
-    csv_rows = await db.csv_campaigns.find().sort("created_at", -1).to_list(1000)
+async def campaigns(user: UserPublic = Depends(require_user)) -> list[CampaignPerformance]:
+    csv_rows = await db.csv_campaigns.find({"user_id": user.id}).sort("created_at", -1).to_list(1000)
     rohly_rows = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(1000)
     rows = csv_rows + rohly_rows
     rows.sort(key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
@@ -126,32 +126,32 @@ async def campaigns() -> list[CampaignPerformance]:
 
 
 @router.get("/search", response_model=list[SearchResult])
-async def global_search(q: str = Query(min_length=1, max_length=100)) -> list[SearchResult]:
+async def global_search(q: str = Query(min_length=1, max_length=100), user: UserPublic = Depends(require_user)) -> list[SearchResult]:
     pattern = {"$regex": q, "$options": "i"}
     results: list[SearchResult] = []
-    for row in await db.csv_campaigns.find({"name": pattern}).limit(5).to_list(5):
+    for row in await db.csv_campaigns.find({"user_id": user.id, "name": pattern}).limit(5).to_list(5):
         results.append(SearchResult(id=row["id"], type="campaign", title=row["name"], subtitle=row.get("status", "draft"), href=f"/campaigns/{row['id']}"))
     pipeline = [
-        {"$match": {"$or": [{"recipient_email": pattern}, {"first_name": pattern}, {"company": pattern}]}},
+        {"$match": {"user_id": user.id, "$or": [{"recipient_email": pattern}, {"first_name": pattern}, {"company": pattern}]}},
         {"$group": {"_id": "$recipient_email", "row": {"$first": "$$ROOT"}}},
         {"$limit": 5},
     ]
     async for result in db.scheduled_emails.aggregate(pipeline):
         row = result["row"]
         results.append(SearchResult(id=row["recipient_email"], type="lead", title=row.get("first_name") or row["recipient_email"], subtitle=f"{row.get('company', '')} · {row['recipient_email']}", href="/leads"))
-    for row in await db.inboxes.find({"$or": [{"email": pattern}, {"display_name": pattern}]}).limit(5).to_list(5):
+    for row in await db.inboxes.find({"user_id": user.id, "$or": [{"email": pattern}, {"display_name": pattern}]}).limit(5).to_list(5):
         results.append(SearchResult(id=row["id"], type="inbox", title=row["email"], subtitle=row.get("status", "connected"), href="/inboxes"))
-    for row in await db.replies.find({"$or": [{"recipient_email": pattern}, {"subject": pattern}, {"snippet": pattern}]}).limit(5).to_list(5):
+    for row in await db.replies.find({"user_id": user.id, "$or": [{"recipient_email": pattern}, {"subject": pattern}, {"snippet": pattern}]}).limit(5).to_list(5):
         results.append(SearchResult(id=row["id"], type="reply", title=row.get("sender_name") or row["recipient_email"], subtitle=row.get("subject", "Reply"), href="/inbox"))
     return results[:15]
 
 
 @router.get("/leads", response_model=LeadPage)
-async def leads(page: int = Query(default=1, ge=1), page_size: int = Query(default=25, ge=10, le=100), q: str = "") -> LeadPage:
-    match: dict = {}
+async def leads(page: int = Query(default=1, ge=1), page_size: int = Query(default=25, ge=10, le=100), q: str = "", user: UserPublic = Depends(require_user)) -> LeadPage:
+    match: dict = {"user_id": user.id}
     if q:
         pattern = {"$regex": q, "$options": "i"}
-        match = {"$or": [{"recipient_email": pattern}, {"first_name": pattern}, {"company": pattern}, {"campaign_name": pattern}]}
+        match = {"user_id": user.id, "$or": [{"recipient_email": pattern}, {"first_name": pattern}, {"company": pattern}, {"campaign_name": pattern}]}
     pipeline = [
         {"$match": match},
         {"$sort": {"scheduled_at": 1}},
@@ -191,15 +191,15 @@ async def leads(page: int = Query(default=1, ge=1), page_size: int = Query(defau
     return LeadPage(items=items, total=total, page=page, page_size=page_size)
 
 
-async def inbox_health_rows(days: int = 7) -> list[InboxHealth]:
-    inboxes = [Inbox(**row) for row in await db.inboxes.find().sort("email", 1).to_list(1000)]
+async def inbox_health_rows(days: int = 7, user_id: str | None = None) -> list[InboxHealth]:
+    inboxes = [Inbox(**row) for row in await db.inboxes.find({"user_id": user_id}).sort("email", 1).to_list(1000)]
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     week = datetime.now(timezone.utc) - timedelta(days=days)
     rows = []
     for inbox in inboxes:
-        sent = await db.scheduled_emails.count_documents({"inbox_id": inbox.id, "status": "sent", "sent_at": {"$gte": today}})
-        failed = await db.scheduled_emails.count_documents({"inbox_id": inbox.id, "status": "failed", "scheduled_at": {"$gte": week}})
-        last = await db.scheduled_emails.find_one({"inbox_id": inbox.id}, sort=[("scheduled_at", -1)])
+        sent = await db.scheduled_emails.count_documents({"user_id": user_id, "inbox_id": inbox.id, "status": "sent", "sent_at": {"$gte": today}})
+        failed = await db.scheduled_emails.count_documents({"user_id": user_id, "inbox_id": inbox.id, "status": "failed", "scheduled_at": {"$gte": week}})
+        last = await db.scheduled_emails.find_one({"user_id": user_id, "inbox_id": inbox.id}, sort=[("scheduled_at", -1)])
         utilization = round((sent / inbox.daily_sending_limit) * 100, 1)
         disconnected = inbox.status != "connected"
         attention = failed > 0 or inbox.reply_tracking_status != "active" or utilization >= 90
@@ -222,33 +222,33 @@ async def inbox_health_rows(days: int = 7) -> list[InboxHealth]:
 
 
 @router.get("/inbox-health", response_model=list[InboxHealth])
-async def inbox_health() -> list[InboxHealth]:
-    return await inbox_health_rows()
+async def inbox_health(user: UserPublic = Depends(require_user)) -> list[InboxHealth]:
+    return await inbox_health_rows(user_id=user.id)
 
 
 @router.get("/replies", response_model=list[Reply])
-async def replies(limit: int = Query(default=100, ge=1, le=500)) -> list[Reply]:
-    rows = await db.replies.find().sort("received_at", -1).to_list(limit)
+async def replies(limit: int = Query(default=100, ge=1, le=500), user: UserPublic = Depends(require_user)) -> list[Reply]:
+    rows = await db.replies.find({"user_id": user.id}).sort("received_at", -1).to_list(limit)
     return [Reply(**row) for row in rows]
 
 
 @router.patch("/replies/{reply_id}", response_model=Reply)
-async def update_reply(reply_id: str, input: ReplyUpdate) -> Reply:
-    row = await db.replies.find_one({"id": reply_id})
+async def update_reply(reply_id: str, input: ReplyUpdate, user: UserPublic = Depends(require_user)) -> Reply:
+    row = await db.replies.find_one({"id": reply_id, "user_id": user.id})
     if not row:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Reply not found")
     updates = {key: value for key, value in input.model_dump().items() if value is not None}
     if updates.get("sentiment") == "positive" and row.get("sentiment") != "positive":
         await db.csv_campaigns.update_one({"id": row["campaign_id"]}, {"$inc": {"positive_replies": 1}})
-    await db.replies.update_one({"id": reply_id}, {"$set": updates})
+    await db.replies.update_one({"id": reply_id, "user_id": user.id}, {"$set": updates})
     return Reply(**{**row, **updates})
 
 
 @router.post("/replies/{reply_id}/send")
-async def send_reply(reply_id: str, input: ReplySendRequest) -> dict[str, str]:
+async def send_reply(reply_id: str, input: ReplySendRequest, user: UserPublic = Depends(require_user)) -> dict[str, str]:
     from fastapi import HTTPException
-    row = await db.replies.find_one({"id": reply_id})
+    row = await db.replies.find_one({"id": reply_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="Reply not found")
     credentials = await get_gmail_credentials(row["inbox_id"])
@@ -268,22 +268,23 @@ async def send_reply(reply_id: str, input: ReplySendRequest) -> dict[str, str]:
     await db.reply_messages.insert_one({
         "id": result.get("id"),
         "reply_id": reply_id,
+        "user_id": user.id,
         "thread_id": row["thread_id"],
         "body": input.body,
         "sent_at": datetime.now(timezone.utc),
     })
-    await db.replies.update_one({"id": reply_id}, {"$set": {"read": True}})
+    await db.replies.update_one({"id": reply_id, "user_id": user.id}, {"$set": {"read": True}})
     return {"status": "sent", "message_id": result.get("id", "")}
 
 
 @router.get("/analytics", response_model=AnalyticsSummary)
-async def analytics(days: int = Query(default=30, ge=7, le=365)) -> AnalyticsSummary:
+async def analytics(days: int = Query(default=30, ge=7, le=365), user: UserPublic = Depends(require_user)) -> AnalyticsSummary:
     start = datetime.now(timezone.utc) - timedelta(days=days)
-    sent = await db.scheduled_emails.count_documents({"status": "sent", "sent_at": {"$gte": start}})
-    failed = await db.scheduled_emails.count_documents({"status": "failed", "scheduled_at": {"$gte": start}})
-    replies_count = await db.replies.count_documents({"received_at": {"$gte": start}})
-    positives = await db.replies.count_documents({"received_at": {"$gte": start}, "sentiment": "positive"})
-    campaigns = await db.csv_campaigns.find({"created_at": {"$gte": start}}).sort("emails_sent", -1).to_list(100)
+    sent = await db.scheduled_emails.count_documents({"user_id": user.id, "status": "sent", "sent_at": {"$gte": start}})
+    failed = await db.scheduled_emails.count_documents({"user_id": user.id, "status": "failed", "scheduled_at": {"$gte": start}})
+    replies_count = await db.replies.count_documents({"user_id": user.id, "received_at": {"$gte": start}})
+    positives = await db.replies.count_documents({"user_id": user.id, "received_at": {"$gte": start}, "sentiment": "positive"})
+    campaigns = await db.csv_campaigns.find({"user_id": user.id, "created_at": {"$gte": start}}).sort("emails_sent", -1).to_list(100)
     return AnalyticsSummary(
         date_range_days=days,
         emails_sent=sent,
@@ -293,9 +294,9 @@ async def analytics(days: int = Query(default=30, ge=7, le=365)) -> AnalyticsSum
         reply_rate=round((replies_count / sent) * 100, 1) if sent else 0,
         positive_reply_rate=round((positives / sent) * 100, 1) if sent else 0,
         bounce_rate=round((failed / (sent + failed)) * 100, 1) if sent + failed else 0,
-        chart=await chart_for_days(min(days, 60)),
+        chart=await chart_for_days(min(days, 60), user.id),
         campaign_comparison=[performance(row) for row in campaigns],
-        inbox_performance=await inbox_health_rows(days),
+        inbox_performance=await inbox_health_rows(days, user.id),
     )
 
 
@@ -454,7 +455,7 @@ async def sync_replies_once() -> None:
                     received_at=received_at,
                 )
 
-                await db.replies.insert_one(reply.model_dump())
+                await db.replies.insert_one({**reply.model_dump(), "user_id": inbox.get("user_id"), "workspace_id": inbox.get("workspace_id")})
 
                 # Mark the whole recipient's campaign sequence as replied and
                 # cancel any remaining follow-ups.
