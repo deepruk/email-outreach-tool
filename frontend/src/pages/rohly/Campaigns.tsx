@@ -11,6 +11,9 @@ import { StatusBadge } from "@/components/rohly/StatusBadge";
 
 export default function Campaigns() {
   const client = useQueryClient();
+  const [tab, setTab] = useState<"all" | "running" | "paused" | "stopped">("all");
+  const [search, setSearch] = useState("");
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
 
   const status = useMutation({
@@ -18,6 +21,7 @@ export default function Campaigns() {
       apiPatch<CsvCampaign>(`/csv/campaigns/${id}/status`, { status: value }),
     onSuccess: (_, variables) => {
       client.invalidateQueries({ queryKey: ["csv-campaigns"] });
+      setOpenMenu(null);
       toast.success(`Campaign ${variables.value}`);
     },
     onError: () => toast.error("Unable to update campaign status"),
@@ -27,6 +31,7 @@ export default function Campaigns() {
     mutationFn: (id: string) => apiDelete<void>(`/csv/campaigns/${id}`),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["csv-campaigns"] });
+      setOpenMenu(null);
       toast.success("Campaign deleted");
     },
     onError: () => toast.error("Unable to delete campaign"),
@@ -37,9 +42,130 @@ export default function Campaigns() {
       toast.error("Pause or stop the campaign before deleting it");
       return;
     }
-    const confirmed = window.confirm(`Delete campaign "${campaign.name}"? This will remove its scheduled emails and cannot be undone.`);
-    if (confirmed) remove.mutate(campaign.id);
+    if (window.confirm(`Delete campaign "${campaign.name}"? This will remove its scheduled emails and cannot be undone.`)) {
+      remove.mutate(campaign.id);
+    }
   };
 
-  return <div data-testid="campaigns-page"><PageHeader eyebrow="Outbound" title="Campaigns" description="Operate personalized sequences, monitor performance, and control delivery from one table." actions={<Button onClick={() => { window.location.href = "/campaigns/new"; }} className="gap-2 bg-blue-700 hover:bg-blue-800" data-testid="new-campaign-button"><Plus size={14} /> Create campaign</Button>} /><Surface testId="campaign-list"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4"><div className="relative w-full max-w-xs"><Search size={14} className="absolute left-3 top-2.5 text-slate-400" /><Input placeholder="Search campaigns" className="h-9 pl-9" data-testid="campaign-search-input" /></div><div className="text-xs text-slate-500">{query.data?.length ?? 0} campaigns</div></div>{query.isLoading ? <SkeletonRows rows={6} /> : query.data?.length ? <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500"><tr><th className="px-4 py-3">Campaign</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Leads</th><th className="px-4 py-3">Sent</th><th className="px-4 py-3">Replies</th><th className="px-4 py-3">Positive</th><th className="px-4 py-3">Reply rate</th><th className="px-4 py-3">Created</th><th className="px-4 py-3" /></tr></thead><tbody className="divide-y divide-slate-100">{query.data.map((campaign) => <tr key={campaign.id} className="text-xs hover:bg-slate-50/70" data-testid={`campaign-row-${campaign.id}`}><td className="px-4 py-3.5"><Link to={`/campaigns/${campaign.id}`} className="font-semibold text-slate-900 hover:text-blue-700">{campaign.name}</Link></td><td className="max-w-44 truncate px-4 py-3.5 text-slate-500">{campaign.source_filename}</td><td className="px-4 py-3.5"><StatusBadge status={campaign.status} /></td><td className="px-4 py-3.5">{campaign.total_leads}</td><td className="px-4 py-3.5">{campaign.emails_sent}</td><td className="px-4 py-3.5">{campaign.replies}</td><td className="px-4 py-3.5">{campaign.positive_replies}</td><td className="px-4 py-3.5">{campaign.emails_sent ? ((campaign.replies / campaign.emails_sent) * 100).toFixed(1) : "0.0"}%</td><td className="px-4 py-3.5 text-slate-500">{new Date(campaign.created_at).toLocaleDateString()}</td><td className="px-4 py-3.5"><div className="flex justify-end gap-1">{campaign.status === "running" ? <button onClick={() => status.mutate({ id: campaign.id, value: "paused" })} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Pause campaign"><Pause size={14} /></button> : campaign.status === "paused" ? <button onClick={() => status.mutate({ id: campaign.id, value: "running" })} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Resume campaign"><Play size={14} /></button> : null}{!["stopped", "completed"].includes(campaign.status) ? <button onClick={() => status.mutate({ id: campaign.id, value: "stopped" })} className="rounded-md p-2 text-red-500 hover:bg-red-50" aria-label="Stop campaign"><Square size={13} /></button> : null}{campaign.status !== "running" ? <button onClick={() => handleDelete(campaign)} disabled={remove.isPending} className="rounded-md p-2 text-red-500 hover:bg-red-50 disabled:opacity-50" aria-label="Delete campaign" title="Delete campaign"><Trash2 size={14} /></button> : null}<Link to={`/campaigns/${campaign.id}`} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Open campaign"><MoreHorizontal size={15} /></Link></div></td></tr>)}</tbody></table></div> : <EmptyState title="No campaigns yet" description="Create your first outbound campaign using a personalized CSV or Rohly Template." action={<Button onClick={() => { window.location.href = "/campaigns/new"; }} className="mt-4 bg-blue-700">Create campaign</Button>} />}</Surface></div>;
+  const campaigns = (query.data ?? [])
+    .filter((campaign) => tab === "all" || (tab === "running" ? campaign.status === "running" : tab === "paused" ? campaign.status === "paused" : ["stopped", "completed"].includes(campaign.status)))
+    .filter((campaign) => campaign.name.toLowerCase().includes(search.toLowerCase()) || campaign.source_filename.toLowerCase().includes(search.toLowerCase()));
+
+  const counts = {
+    all: query.data?.length ?? 0,
+    running: query.data?.filter((c) => c.status === "running").length ?? 0,
+    paused: query.data?.filter((c) => c.status === "paused").length ?? 0,
+    stopped: query.data?.filter((c) => ["stopped", "completed"].includes(c.status)).length ?? 0,
+  };
+
+  return (
+    <div data-testid="campaigns-page" className="-mx-4 -mt-4 min-h-[calc(100vh-5rem)] bg-white sm:-mx-6 lg:-mx-7">
+      <div className="border-b border-slate-200 bg-white px-5 pt-5 lg:px-7">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[15px] font-bold tracking-[-0.01em] text-slate-900">Email Campaigns</h1>
+            <p className="mt-0.5 text-xs text-slate-500">Manage and track all your outreach campaigns</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="hidden items-center rounded-full border border-slate-200 bg-slate-50 p-0.5 sm:flex">
+              <button className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-slate-500">◷ Old Version</button>
+              <button className="rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-600 shadow-sm">✦ New Version</button>
+            </div>
+            <Button onClick={() => { window.location.href = "/campaigns/new"; }} className="h-9 gap-2 rounded-lg bg-violet-600 px-4 text-xs font-semibold hover:bg-violet-700" data-testid="new-campaign-button"><Plus size={14} /> Create Campaign</Button>
+          </div>
+        </div>
+        <div className="mt-8 flex items-end gap-7 overflow-x-auto">
+          {([
+            ["all", `All Campaigns (${counts.all})`],
+            ["running", `Active (${counts.running})`],
+            ["paused", `Paused (${counts.paused})`],
+            ["stopped", `Stopped (${counts.stopped})`],
+          ] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)} className={`relative whitespace-nowrap pb-3 text-xs font-semibold ${tab === key ? "text-violet-600" : "text-slate-400 hover:text-slate-700"}`}>
+              {label}{tab === key ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-violet-600" /> : null}
+            </button>
+          ))}
+          <span className="whitespace-nowrap pb-3 text-xs font-semibold text-slate-400">Folders (0)</span>
+        </div>
+      </div>
+
+      <div className="px-5 py-5 lg:px-7">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Campaign filters">⌄</button>
+            <div className="relative w-64">
+              <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for campaign..." className="h-9 rounded-lg border-slate-200 pl-9 text-xs" data-testid="campaign-search-input" />
+            </div>
+          </div>
+          <button className="hidden size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 sm:flex" aria-label="Columns">▥</button>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-[0_1px_5px_rgba(15,23,42,0.04)]">
+          {query.isLoading ? <SkeletonRows rows={6} /> : campaigns.length ? (
+            <table className="w-full min-w-[1260px] text-left">
+              <thead className="bg-slate-50/90 text-[11px] font-semibold text-slate-500">
+                <tr>
+                  <th className="w-10 px-4 py-4"><input type="checkbox" aria-label="Select all campaigns" /></th>
+                  <th className="min-w-[360px] px-4 py-4">Campaign name</th>
+                  <th className="px-4 py-4 text-violet-600">♧ Leads ⓘ</th>
+                  <th className="px-4 py-4 text-violet-600">✉ Sent ⓘ</th>
+                  <th className="px-4 py-4 text-fuchsia-500">▣ Opened ⓘ</th>
+                  <th className="px-4 py-4 text-orange-500">✦ Clicked ⓘ</th>
+                  <th className="px-4 py-4 text-cyan-600">↩ Replied ⓘ</th>
+                  <th className="px-4 py-4 text-green-600">ⓢ Positive ⓘ</th>
+                  <th className="px-4 py-4 text-red-500">⌁ Failed ⓘ</th>
+                  <th className="px-4 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {campaigns.map((campaign) => {
+                  const totalSends = Math.max(1, campaign.total_leads * Math.max(1, campaign.steps.length));
+                  const progress = Math.min(100, Math.round((campaign.emails_sent / totalSends) * 100));
+                  const replyRate = campaign.emails_sent ? (campaign.replies / campaign.emails_sent) * 100 : 0;
+                  return (
+                    <tr key={campaign.id} className="text-xs hover:bg-slate-50/70">
+                      <td className="px-4 py-5 align-middle"><input type="checkbox" aria-label={`Select ${campaign.name}`} /></td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex size-12 shrink-0 items-center justify-center rounded-full" style={{ background: `conic-gradient(#8b7cf6 ${progress * 3.6}deg, #edf0f7 0deg)` }}>
+                            <div className="flex size-9 items-center justify-center rounded-full bg-white text-[10px] font-bold text-slate-700">{progress}%</div>
+                          </div>
+                          <div className="min-w-0">
+                            <Link to={`/campaigns/${campaign.id}`} className="block truncate text-[13px] font-semibold text-slate-900 hover:text-violet-600">{campaign.name}</Link>
+                            <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400"><span>{campaign.steps.length} sequences</span><span>•</span><span>Created {new Date(campaign.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span><span>•</span><StatusBadge status={campaign.status} /></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-[15px] font-medium text-violet-600">{campaign.total_leads}</td>
+                      <td className="px-4 py-4 text-[15px] font-medium text-violet-600">{campaign.emails_sent}</td>
+                      <td className="px-4 py-4 text-slate-400">—</td>
+                      <td className="px-4 py-4 text-slate-400">—</td>
+                      <td className="px-4 py-4"><span className="text-[15px] font-medium text-cyan-600">{campaign.replies}</span><span className="ml-1 text-[10px] text-slate-400">{replyRate.toFixed(2)}%</span></td>
+                      <td className="px-4 py-4 text-[15px] font-medium text-green-600">{campaign.positive_replies}</td>
+                      <td className="px-4 py-4"><span className="text-[15px] font-medium text-red-500">{campaign.failed_emails}</span></td>
+                      <td className="relative px-4 py-4">
+                        <div className="flex justify-end gap-1">
+                          <Link to={`/campaigns/${campaign.id}`} className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Open campaign">↗</Link>
+                          <button onClick={() => setOpenMenu(openMenu === campaign.id ? null : campaign.id)} className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Campaign actions"><MoreHorizontal size={15} /></button>
+                        </div>
+                        {openMenu === campaign.id ? <div className="absolute right-4 top-14 z-30 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Campaign status</div>
+                          {campaign.status === "running" ? <button onClick={() => status.mutate({ id: campaign.id, value: "paused" })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs hover:bg-slate-50"><Pause size={14} className="text-amber-500" /> Pause campaign</button> : campaign.status === "paused" ? <button onClick={() => status.mutate({ id: campaign.id, value: "running" })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs hover:bg-slate-50"><Play size={14} className="text-emerald-500" /> Resume campaign</button> : null}
+                          {!["stopped", "completed"].includes(campaign.status) ? <button onClick={() => status.mutate({ id: campaign.id, value: "stopped" })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs hover:bg-slate-50"><Square size={13} className="text-red-500" /> Stop campaign</button> : null}
+                          <div className="my-1 border-t border-slate-100" />
+                          <button onClick={() => handleDelete(campaign)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"><Trash2 size={14} /> Delete campaign</button>
+                        </div> : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : <EmptyState title="No campaigns found" description="Create a campaign or change your search/filter." action={<Button onClick={() => { window.location.href = "/campaigns/new"; }} className="mt-4 bg-violet-600 hover:bg-violet-700">Create Campaign</Button>} />}
+        </div>
+        <p className="mt-3 text-[10px] text-slate-400">Opened and Clicked tracking will appear here once those events are available. The dashboard never invents engagement data.</p>
+      </div>
+    </div>
+  );
 }
