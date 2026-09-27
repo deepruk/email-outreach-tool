@@ -296,14 +296,14 @@ async def connect_inbox(input: InboxConnectRequest, user: UserPublic = Depends(r
             message="Inbox connected",
             detail=f"{inbox.email} is ready for campaign routing",
             tone="success",
-        ).model_dump()
+        ).model_dump(), "user_id": user.id}
     )
     return inbox
 
 
 @router.delete("/inboxes/{inbox_id}", status_code=204)
-async def delete_inbox(inbox_id: str) -> Response:
-    inbox = await db.inboxes.find_one({"id": inbox_id})
+async def delete_inbox(inbox_id: str, user: UserPublic = Depends(require_user)) -> Response:
+    inbox = await db.inboxes.find_one({"id": inbox_id, "user_id": user.id})
     if not inbox:
         raise HTTPException(status_code=404, detail="Inbox not found")
     usage = await db.campaigns.count_documents({"inbox_id": inbox_id})
@@ -315,8 +315,8 @@ async def delete_inbox(inbox_id: str) -> Response:
 
 
 @router.patch("/inboxes/{inbox_id}", response_model=Inbox)
-async def update_inbox(inbox_id: str, input: InboxUpdate) -> Inbox:
-    inbox = await db.inboxes.find_one({"id": inbox_id})
+async def update_inbox(inbox_id: str, input: InboxUpdate, user: UserPublic = Depends(require_user)) -> Inbox:
+    inbox = await db.inboxes.find_one({"id": inbox_id, "user_id": user.id})
     if not inbox:
         raise HTTPException(status_code=404, detail="Inbox not found")
     updates = input.model_dump()
@@ -338,8 +338,8 @@ async def create_recipient(input: RecipientCreate, user: UserPublic = Depends(re
 
 
 @router.delete("/recipients/{recipient_id}", status_code=204)
-async def delete_recipient(recipient_id: str) -> Response:
-    recipient = await db.recipients.find_one({"id": recipient_id})
+async def delete_recipient(recipient_id: str, user: UserPublic = Depends(require_user)) -> Response:
+    recipient = await db.recipients.find_one({"id": recipient_id, "user_id": user.id})
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
     usage = await db.campaigns.count_documents({"recipient_ids": recipient_id})
@@ -363,8 +363,8 @@ async def create_template(input: TemplateCreate, user: UserPublic = Depends(requ
 
 
 @router.delete("/templates/{template_id}", status_code=204)
-async def delete_template(template_id: str) -> Response:
-    template = await db.templates.find_one({"id": template_id})
+async def delete_template(template_id: str, user: UserPublic = Depends(require_user)) -> Response:
+    template = await db.templates.find_one({"id": template_id, "user_id": user.id})
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     usage = await db.campaigns.count_documents({"template_id": template_id})
