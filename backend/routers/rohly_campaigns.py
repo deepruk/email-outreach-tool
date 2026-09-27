@@ -150,6 +150,14 @@ def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict
     return events
 
 
+@router.get("/campaigns")
+async def list_campaigns() -> list[dict]:
+    rows = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(1000)
+    for row in rows:
+        row.pop("_id", None)
+    return rows
+
+
 @router.get("/templates")
 async def templates() -> list[dict]:
     return await db.templates.find().sort("created_at", -1).to_list(1000)
