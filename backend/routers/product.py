@@ -442,6 +442,21 @@ async def sync_replies_once() -> None:
                 except (TypeError, ValueError, OverflowError):
                     received_at = datetime.now(timezone.utc)
 
+                bounce_signal = ("mailer-daemon" in sender_email.lower() or "postmaster" in sender_email.lower() or "delivery status notification" in subject.lower() or "undeliverable" in subject.lower())
+                if bounce_signal:
+                    is_rohly = sent.get("source_type") == "rohly_template"
+                    campaign_collection = db.campaigns if is_rohly else db.csv_campaigns
+                    bounce_campaign = await campaign_collection.find_one({"id": sent["campaign_id"]})
+                    already_bounced = bool(sent.get("bounced_at"))
+                    await db.scheduled_emails.update_one({"id": sent["id"]}, {"$set": {"bounced_at": received_at, "status": "failed", "error": "Mailbox provider reported a delivery failure"}})
+                    await db.scheduled_emails.update_many({"campaign_id": sent["campaign_id"], "recipient_email": sent["recipient_email"], "status": "scheduled"}, {"$set": {"status": "cancelled", "error": "Cancelled after bounce"}})
+                    await db.suppressions.update_one({"user_id": inbox.get("user_id"), "email": sent["recipient_email"].strip().lower()}, {"$set": {"reason": "bounced", "updated_at": received_at}, "$setOnInsert": {"created_at": received_at}}, upsert=True)
+                    if not already_bounced:
+                        await campaign_collection.update_one({"id": sent["campaign_id"]}, {"$inc": {"bounces": 1}})
+                    if bounce_campaign:
+                        await emit_campaign_event(bounce_campaign, "bounced", {"recipient_email": sent["recipient_email"], "received_at": received_at, "subject": subject})
+                    continue
+
                 reply = Reply(
                     gmail_message_id=gmail_message_id,
                     thread_id=thread_id,
