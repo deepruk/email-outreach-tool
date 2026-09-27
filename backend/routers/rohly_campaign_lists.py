@@ -101,7 +101,9 @@ async def use_recipient_list(source_id: str) -> dict:
             continue
         seen.add(email)
         source_email_count += 1
-        if email in existing_emails or email in used_emails:
+        # Existing contacts are reusable in a new campaign. Only contacts that are
+        # already scheduled/in use by another campaign are skipped automatically.
+        if email in used_emails:
             duplicate_count += 1
             continue
         name = _row_value(source_row, name_column)
