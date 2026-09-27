@@ -1,5 +1,7 @@
 export interface Inbox { id:string; email:string; display_name:string; provider:"gmail"; status:"connected"|"paused"|"error"; connected_at:string; last_used_at:string|null; is_mocked:boolean; signature:string; daily_sending_limit:number; reply_tracking_status:"active"|"reconnect_required"|"unavailable"; sent_today:number; last_reply_sync_at:string|null }
 export interface UserPublic { id:string; email:string; name:string; role:string; created_at:string }
+export interface Workspace { id:string; name:string; slug:string; created_by:string; created_at:string }
+export interface WorkspaceContext { workspace:Workspace; role:"owner"|"admin"|"member" }
 export interface Metric { label:string; value:number; change:number|null }
 export interface ChartPoint { date:string; sends:number; replies:number; positive_replies:number }
 export interface CampaignPerformance { id:string; name:string; status:string; source:string; leads:number; sent:number; replies:number; positive_replies:number; reply_rate:number; progress:number; failed:number; steps_count:number; created_at:string }
