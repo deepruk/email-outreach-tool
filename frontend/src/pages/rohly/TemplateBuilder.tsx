@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -115,7 +115,7 @@ export default function TemplateBuilder() {
   });
 
   useEffect(() => {
-    if (!draftReady || createMutation.isPending) return;
+    if (!draftReady) return;
     const timer = window.setTimeout(() => saveDraftMutation.mutate({
       id: draftId || undefined, name, active_step: activeStep, selected_recipients: selectedRecipients, selected_inboxes: selectedInboxes,
       selected_lists: selectedLists, list_recipient_map: listRecipientMap, steps, timezone, min_gap_minutes: minGapMinutes, max_gap_minutes: maxGapMinutes,
