@@ -95,7 +95,7 @@ async def dashboard() -> CommandCenter:
     csv_campaigns = await db.csv_campaigns.find().sort("created_at", -1).to_list(100)
     rohly_campaigns = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(100)
     campaigns = csv_campaigns + rohly_campaigns
-    active = sum(1 for row in campaigns if row.get("status") in {"running", "active"})
+    active = sum(1 for row in campaigns if str(row.get("status") or "").strip().lower() in {"running", "active"})
     scheduled = await db.scheduled_emails.count_documents({"status": "scheduled"})
     failed = await db.scheduled_emails.count_documents({"status": "failed"})
     attention = await db.inboxes.count_documents({"$or": [{"status": {"$ne": "connected"}}, {"reply_tracking_status": {"$ne": "active"}}]})
