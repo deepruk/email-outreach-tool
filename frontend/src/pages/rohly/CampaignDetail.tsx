@@ -19,13 +19,45 @@ export default function CampaignDetail() {
   const [testOpen, setTestOpen] = useState(false);
   const client = useQueryClient();
   const campaigns = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
-  const activity = useQuery({ queryKey: ["campaign-activity", campaignId], queryFn: () => apiGet<ScheduledEmail[]>(`/csv/campaigns/${campaignId}/activity`), enabled: Boolean(campaignId) });
-  const campaign = campaigns.data?.find((item) => item.id === campaignId);
+  const rohlyCampaigns = useQuery({ queryKey: ["rohly-campaigns"], queryFn: () => apiGet<any[]>("/workspace/rohly-campaigns/campaigns") });
+  const isRohly = Boolean(rohlyCampaigns.data?.some((item) => item.id === campaignId));
+  const activity = useQuery({
+    queryKey: ["campaign-activity", campaignId, isRohly ? "rohly" : "csv"],
+    queryFn: () => apiGet<any[]>(isRohly ? `/workspace/rohly-campaigns/${campaignId}/activity` : `/csv/campaigns/${campaignId}/activity`),
+    enabled: Boolean(campaignId) && (isRohly || campaigns.isSuccess),
+  });
+  const rohly = rohlyCampaigns.data?.find((item) => item.id === campaignId);
+  const campaign = (campaigns.data?.find((item) => item.id === campaignId) ?? (rohly ? {
+    ...rohly,
+    source_id: "",
+    source_filename: "Rohly Template",
+    email_column: "email",
+    first_name_column: "name",
+    company_column: "company",
+    status_column: null,
+    emails_sent: rohly.sent_count ?? 0,
+    emails_scheduled: rohly.emails_scheduled ?? 0,
+    follow_ups_scheduled: 0,
+    failed_emails: rohly.failed_count ?? 0,
+    skipped_leads: 0,
+    replies: 0,
+    positive_replies: 0,
+    total_leads: rohly.total_count ?? 0,
+    status: rohly.status === "active" ? "running" : rohly.status === "queued" ? "draft" : rohly.status,
+    launched_at: rohly.launched_at ?? null,
+    sending_days: rohly.sending_days ?? [0,1,2,3,4],
+    min_gap_minutes: rohly.min_gap_minutes ?? 10,
+    max_gap_minutes: rohly.max_gap_minutes ?? 20,
+    sending_window_start: rohly.sending_window_start ?? "09:00",
+    sending_window_end: rohly.sending_window_end ?? "18:00",
+    timezone: rohly.timezone ?? "Asia/Kolkata",
+    steps: (rohly.steps ?? []).map((step: any, index: number) => ({ key: `step_${index + 1}`, label: step.label ?? `Email ${index + 1}`, subject_column: "", body_column: "", day_offset: step.delay_days ?? 0, send_time: rohly.sending_window_start ?? "09:00" })),
+  } : undefined)) as CsvCampaign | undefined;
   const status = useMutation({
     mutationFn: (value: "running" | "paused" | "stopped") => apiPatch<CsvCampaign>(`/csv/campaigns/${campaignId}/status`, { status: value }),
     onSuccess: (_, value) => { client.invalidateQueries({ queryKey: ["csv-campaigns"] }); toast.success(`Campaign ${value}`); },
   });
-  if (campaigns.isLoading || !campaign) return <SkeletonRows rows={8} />;
+  if (campaigns.isLoading || rohlyCampaigns.isLoading || !campaign) return <SkeletonRows rows={8} />;
   const events = activity.data ?? [];
   const leadEmails = [...new Set(events.map((item) => item.recipient_email))];
 
@@ -35,11 +67,11 @@ export default function CampaignDetail() {
   const progress = Math.min(100, Math.round((completed / totalPlanned) * 100));
 
   return <div data-testid="campaign-detail-page" className="-mx-4 -mt-4 min-h-[calc(100vh-5rem)] bg-white sm:-mx-6 lg:-mx-7">
-    <div className="border-b border-slate-200 bg-white px-5 py-4 lg:px-7"><div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><Link to="/campaigns" className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><ArrowLeft size={14} /></Link><div><div className="flex items-center gap-2"><h1 className="text-[16px] font-bold text-slate-900">{campaign.name}</h1><StatusBadge status={campaign.status} /></div><p className="mt-1 text-[10px] text-slate-400">Created {new Date(campaign.created_at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div></div><div className="flex flex-wrap gap-2"><Button onClick={() => setTestOpen(true)} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><FlaskConical size={13} /> Send test</Button><Button render={<Link to={`/campaigns/${campaign.id}/edit`} />} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><Pencil size={13} /> Edit</Button>{campaign.status === "running" ? <Button onClick={() => status.mutate("paused")} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><Pause size={13} /> Pause</Button> : campaign.status === "paused" ? <Button onClick={() => status.mutate("running")} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><Play size={13} /> Resume</Button> : null}{!["stopped", "completed"].includes(campaign.status) ? <Button onClick={() => status.mutate("stopped")} variant="outline" className="h-9 gap-2 rounded-lg text-xs text-red-600"><Square size={12} /> Stop</Button> : null}<Button variant="default" onClick={() => { window.location.href = `/api/csv/campaigns/${campaign.id}/export`; }} className="h-9 gap-2 rounded-lg bg-violet-600 text-xs hover:bg-violet-700"><Download size={13} /> Export</Button></div></div></div>
+    <div className="border-b border-slate-200 bg-white px-5 py-4 lg:px-7"><div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><Link to="/campaigns" className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><ArrowLeft size={14} /></Link><div><div className="flex items-center gap-2"><h1 className="text-[16px] font-bold text-slate-900">{campaign.name}</h1><StatusBadge status={campaign.status} /></div><p className="mt-1 text-[10px] text-slate-400">Created {new Date(campaign.created_at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div></div><div className="flex flex-wrap gap-2">{!isRohly ? <Button onClick={() => setTestOpen(true)} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><FlaskConical size={13} /> Send test</Button> : null}{!isRohly ? <Button render={<Link to={`/campaigns/${campaign.id}/edit`} />} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><Pencil size={13} /> Edit</Button> : null}{!isRohly && campaign.status === "running" ? <Button onClick={() => status.mutate("paused")} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><Pause size={13} /> Pause</Button> : !isRohly && campaign.status === "paused" ? <Button onClick={() => status.mutate("running")} variant="outline" className="h-9 gap-2 rounded-lg text-xs"><Play size={13} /> Resume</Button> : null}{!["stopped", "completed"].includes(campaign.status) ? <Button onClick={() => status.mutate("stopped")} variant="outline" className="h-9 gap-2 rounded-lg text-xs text-red-600"><Square size={12} /> Stop</Button> : null}<Button variant="default" onClick={() => { window.location.href = `/api/csv/campaigns/${campaign.id}/export`; }} className="h-9 gap-2 rounded-lg bg-violet-600 text-xs hover:bg-violet-700"><Download size={13} /> Export</Button></div></div></div>
     <div className="grid grid-cols-2 divide-x border-b border-slate-100 bg-slate-50/50 sm:grid-cols-3 lg:grid-cols-6">{[{ icon: CalendarClock, label: "Follow-ups Today", value: events.filter((item) => item.step_key !== campaign.steps[0]?.key && item.status === "scheduled").length },{ icon: Webhook, label: "Webhooks", value: "Disabled" },{ icon: Send, label: "Sending Capacity", value: campaign.inbox_ids.length + " inbox" + (campaign.inbox_ids.length === 1 ? "" : "es") },{ icon: BarChart3, label: "Active Sequences", value: campaign.steps.length },{ icon: Mail, label: "Emails Sent", value: completed },{ icon: CalendarClock, label: "Next Email", value: nextScheduled ? formatCampaignDateTime(nextScheduled.scheduled_at, campaign.timezone) : "None scheduled" }].map(({ icon: Icon, label, value }) => <div key={label} className="flex min-h-[68px] items-center gap-3 px-4 py-3 lg:px-5"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><Icon size={14} /></span><div className="min-w-0"><p className="text-[10px] font-medium text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-semibold text-slate-700">{value}</p></div></div>)}</div>
     <div className="flex gap-1 overflow-x-auto border-b border-slate-200 px-5 lg:px-7" role="tablist">{tabs.map((item) => <button key={item} onClick={() => setTab(item)} className={`relative whitespace-nowrap px-4 py-3.5 text-xs font-semibold ${tab === item ? "text-violet-600" : "text-slate-400 hover:text-slate-700"}`} role="tab" aria-selected={tab === item}>{item}{tab === item ? <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-violet-600" /> : null}</button>)}</div>
     <div className="px-5 py-5 lg:px-7">{tab === "Overview" ? <Overview campaign={campaign} events={events} progress={progress} /> : null}{tab === "Sequence" ? <Sequence campaign={campaign} events={events} /> : null}{tab === "Leads" ? <Leads events={events} leadEmails={leadEmails} /> : null}{tab === "Analytics" ? <CampaignAnalytics campaign={campaign} /> : null}{tab === "Activity" ? <Activity events={events} timezone={campaign.timezone} /> : null}{tab === "Settings" ? <Surface className="p-5" testId="campaign-settings"><div className="flex items-center gap-2"><Settings2 size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Campaign settings</h2></div><p className="mt-2 text-xs leading-relaxed text-slate-500">Timezone: {campaign.timezone}. Use Edit to change source rows, mappings, inboxes, or schedule. Sent, failed, and replied history is protected while future unsent emails are rebuilt.</p></Surface> : null}</div>
-    {testOpen ? <TestEmailDialog campaignId={campaign.id} inboxCount={campaign.inbox_ids.length} onClose={() => setTestOpen(false)} /> : null}
+    {testOpen && !isRohly ? <TestEmailDialog campaignId={campaign.id} inboxCount={campaign.inbox_ids.length} onClose={() => setTestOpen(false)} /> : null}
   </div>;
 }
 
