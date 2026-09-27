@@ -28,6 +28,7 @@ from models.csv_campaign import (
 )
 from models.scheduler import Inbox
 from routers.scheduler import send_gmail_message
+from routers.open_tracking import tracked_send_gmail_message
 from routers.auth import require_user
 from models.auth import UserPublic
 
@@ -745,7 +746,8 @@ async def process_due_sends() -> None:
                     continue
 
                 try:
-                    send_result = await send_gmail_message(
+                    send_result = await tracked_send_gmail_message(
+                        row["id"],
                         row["inbox_id"],
                         recipient_email,
                         row["subject"],
