@@ -15,6 +15,7 @@ export default function Campaigns() {
   const [tab, setTab] = useState<"all" | "running" | "paused" | "stopped">("all");
   const [search, setSearch] = useState("");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
   const rohlyQuery = useQuery({ queryKey: ["rohly-campaigns"], queryFn: () => apiGet<any[]>("/workspace/rohly-campaigns/campaigns") });
 
@@ -66,6 +67,38 @@ export default function Campaigns() {
     is_rohly: true,
   } as unknown as CsvCampaign));
 
+
+  const toggleCampaignSelection = (id: string) => {
+    setSelectedCampaigns((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+
+  const toggleAllCampaigns = () => {
+    const ids = campaigns.map((campaign) => campaign.id);
+    setSelectedCampaigns((current) => current.length === ids.length ? [] : ids);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedCampaigns.length) return;
+    const selected = campaigns.filter((campaign) => selectedCampaigns.includes(campaign.id));
+    const blocked = selected.filter((campaign) => campaign.status === "running");
+    if (blocked.length) {
+      toast.error("Pause or stop active campaigns before deleting them");
+      return;
+    }
+    if (!window.confirm(`Delete ${selected.length} selected campaign${selected.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    try {
+      await Promise.all(selected.map((campaign) => apiDelete<void>(`/workspace/rohly-campaigns/${campaign.id}`)));
+      setSelectedCampaigns([]);
+      client.invalidateQueries({ queryKey: ["csv-campaigns"] });
+      client.invalidateQueries({ queryKey: ["rohly-campaigns"] });
+      toast.success(`${selected.length} campaign${selected.length === 1 ? "" : "s"} deleted`);
+    } catch {
+      toast.error("Some campaigns could not be deleted");
+      client.invalidateQueries({ queryKey: ["csv-campaigns"] });
+      client.invalidateQueries({ queryKey: ["rohly-campaigns"] });
+    }
+  };
+
   const campaigns = ([...(query.data ?? []), ...rohlyCampaigns])
     .filter((campaign) => tab === "all" || (tab === "running" ? campaign.status === "running" : tab === "paused" ? campaign.status === "paused" : ["stopped", "completed"].includes(campaign.status)))
     .filter((campaign) => campaign.name.toLowerCase().includes(search.toLowerCase()) || campaign.source_filename.toLowerCase().includes(search.toLowerCase()));
@@ -112,6 +145,7 @@ export default function Campaigns() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Campaign filters">⌄</button>
+            {selectedCampaigns.length > 0 ? <button onClick={handleBulkDelete} className="h-9 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100"><Trash2 size={13} className="mr-1 inline" /> Delete {selectedCampaigns.length}</button> : null}
             <div className="relative w-64">
               <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
               <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for campaign..." className="h-9 rounded-lg border-slate-200 pl-9 text-xs" data-testid="campaign-search-input" />
@@ -125,7 +159,7 @@ export default function Campaigns() {
             <table className="w-full min-w-[1260px] text-left">
               <thead className="bg-slate-50/90 text-[11px] font-semibold text-slate-500">
                 <tr>
-                  <th className="w-10 px-4 py-4"><input type="checkbox" aria-label="Select all campaigns" /></th>
+                  <th className="w-10 px-4 py-4"><input type="checkbox" aria-label="Select all campaigns" checked={campaigns.length > 0 && selectedCampaigns.length === campaigns.length} onChange={toggleAllCampaigns} /></th>
                   <th className="min-w-[360px] px-4 py-4">Campaign name</th>
                   <th className="px-4 py-4 text-violet-600">♧ Leads ⓘ</th>
                   <th className="px-4 py-4 text-violet-600">✉ Sent ⓘ</th>
@@ -144,7 +178,7 @@ export default function Campaigns() {
                   const replyRate = campaign.emails_sent ? (campaign.replies / campaign.emails_sent) * 100 : 0;
                   return (
                     <tr key={campaign.id} className="text-xs hover:bg-slate-50/70">
-                      <td className="px-4 py-5 align-middle"><input type="checkbox" aria-label={`Select ${campaign.name}`} /></td>
+                      <td className="px-4 py-5 align-middle"><input type="checkbox" aria-label={`Select ${campaign.name}`} checked={selectedCampaigns.includes(campaign.id)} onChange={() => toggleCampaignSelection(campaign.id)} /></td>
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
                           <div className="relative flex size-12 shrink-0 items-center justify-center rounded-full" style={{ background: `conic-gradient(#8b7cf6 ${progress * 3.6}deg, #edf0f7 0deg)` }}>
