@@ -13,6 +13,7 @@ from routers.auth import require_user
 from models.auth import UserPublic
 from routers.scheduler import send_gmail_message
 from routers.open_tracking import tracked_send_gmail_message
+from lib.campaign_events import emit_campaign_event
 
 router = APIRouter(prefix="/workspace/rohly-campaigns", tags=["rohly-campaigns"], dependencies=[Depends(require_user)])
 
@@ -21,6 +22,7 @@ class Step(BaseModel):
     template_id: str
     label: str = "Initial email"
     delay_days: int = Field(default=0, ge=0, le=365)
+    variant_template_ids: list[str] = []
 
 
 class TestRunRequest(BaseModel):
@@ -57,6 +59,26 @@ class CampaignCreate(BaseModel):
     stop_on_reply: bool = True
     follow_up_priority: int = Field(default=100, ge=0, le=100)
     distribution_mode: str = "pattern"
+    open_tracking: bool = True
+    click_tracking: bool = False
+    unsubscribe_enabled: bool = True
+    stop_on_open: bool = False
+    stop_on_click: bool = False
+    bounce_auto_pause_rate: float = Field(default=5.0, ge=0, le=100)
+    webhook_url: str = ""
+    webhook_events: list[str] = ["sent", "opened", "clicked", "replied", "bounced", "unsubscribed", "campaign_completed"]
+
+
+class CampaignFeatureUpdate(BaseModel):
+    open_tracking: bool = True
+    click_tracking: bool = False
+    unsubscribe_enabled: bool = True
+    stop_on_reply: bool = True
+    stop_on_open: bool = False
+    stop_on_click: bool = False
+    bounce_auto_pause_rate: float = Field(default=5.0, ge=0, le=100)
+    webhook_url: str = ""
+    webhook_events: list[str] = []
 
 
 def _clock(value: str) -> tuple[int, int]:
@@ -136,7 +158,13 @@ def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict
                 "step_index": step_index,
                 "step_key": f"step_{step_index + 1}",
                 "step_label": step.get("label", f"Email {step_index + 1}"),
-                "template_id": step["template_id"],
+                "template_id": (
+                    [step["template_id"], *step.get("variant_template_ids", [])][
+                        random.Random(f"{campaign_id}:{recipient['id']}:step:{step_index}:variant").randrange(
+                            len([step["template_id"], *step.get("variant_template_ids", [])])
+                        )
+                    ]
+                ),
                 "inbox_id": inbox_id,
                 "scheduled_at": scheduled.astimezone(timezone.utc),
                 "status": "scheduled",
@@ -206,6 +234,14 @@ class DraftCreate(BaseModel):
     stop_on_reply: bool = True
     follow_up_priority: int = 100
     distribution_mode: str = "pattern"
+    open_tracking: bool = True
+    click_tracking: bool = False
+    unsubscribe_enabled: bool = True
+    stop_on_open: bool = False
+    stop_on_click: bool = False
+    bounce_auto_pause_rate: float = 5.0
+    webhook_url: str = ""
+    webhook_events: list[str] = []
 
 
 @router.get("/drafts")
@@ -244,6 +280,14 @@ async def save_draft(input: DraftCreate, user: UserPublic = Depends(require_user
         "stop_on_reply": input.stop_on_reply,
         "follow_up_priority": input.follow_up_priority,
         "distribution_mode": input.distribution_mode,
+        "open_tracking": input.open_tracking,
+        "click_tracking": input.click_tracking,
+        "unsubscribe_enabled": input.unsubscribe_enabled,
+        "stop_on_open": input.stop_on_open,
+        "stop_on_click": input.stop_on_click,
+        "bounce_auto_pause_rate": input.bounce_auto_pause_rate,
+        "webhook_url": input.webhook_url,
+        "webhook_events": input.webhook_events,
         "updated_at": now,
         "created_at": now,
         "user_id": user.id,
@@ -437,6 +481,23 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
     return response_campaign
 
 
+@router.patch("/{campaign_id}/features")
+async def update_campaign_features(campaign_id: str, input: CampaignFeatureUpdate, user: UserPublic = Depends(require_user)) -> dict:
+    campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Rohly campaign not found")
+    if input.webhook_url and not input.webhook_url.startswith(("https://", "http://")):
+        raise HTTPException(status_code=422, detail="Webhook URL must start with http:// or https://")
+    allowed = {"sent", "opened", "clicked", "replied", "bounced", "unsubscribed", "campaign_completed"}
+    if any(event not in allowed for event in input.webhook_events):
+        raise HTTPException(status_code=422, detail="Unsupported webhook event")
+    updates = input.model_dump()
+    await db.campaigns.update_one({"id": campaign_id, "user_id": user.id}, {"$set": updates})
+    campaign.update(updates)
+    campaign.pop("_id", None)
+    return campaign
+
+
 @router.patch("/{campaign_id}/status")
 async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest, user: UserPublic = Depends(require_user)) -> dict:
     campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
@@ -554,6 +615,12 @@ async def process_template_campaigns() -> None:
                     await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "cancelled"}})
                     continue
                 recipient = await db.recipients.find_one({"id": item["recipient_id"]})
+                if recipient:
+                    suppressed = await db.suppressions.find_one({"user_id": campaign.get("user_id"), "email": recipient.get("email", "").strip().lower()})
+                    if suppressed:
+                        await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "cancelled", "error": "Lead is on the suppression list"}})
+                        await db.scheduled_emails.update_many({"campaign_id": item["campaign_id"], "recipient_id": item["recipient_id"], "status": "scheduled"}, {"$set": {"status": "cancelled", "error": "Lead is on the suppression list"}})
+                        continue
                 template = await db.templates.find_one({"id": item["template_id"]})
                 inbox = await db.inboxes.find_one({"id": item["inbox_id"]})
                 if not recipient or not template or not inbox:
@@ -587,14 +654,34 @@ async def process_template_campaigns() -> None:
                     sent_at = datetime.now(timezone.utc)
                     await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "sent", "sent_at": sent_at, "subject": subject, "body": body, "message_id": result.get("message_id"), "thread_id": result.get("thread_id"), "error": None}})
                     await db.campaigns.update_one({"id": item["campaign_id"]}, {"$inc": {"sent_count": 1}})
+                    await emit_campaign_event(campaign, "sent", {"scheduled_email_id": item["id"], "recipient_email": recipient["email"], "step_index": item.get("step_index", 0)})
                 except Exception as exc:
                     await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "failed", "error": str(exc)[:500], "sent_at": datetime.now(timezone.utc)}})
-                    await db.campaigns.update_one({"id": item["campaign_id"]}, {"$inc": {"failed_count": 1}})
+                    error_text = str(exc)[:500]
+                    is_bounce = any(token in error_text.lower() for token in ["550", "551", "552", "553", "554", "recipient address rejected", "mailbox unavailable", "user unknown"])
+                    increments = {"failed_count": 1}
+                    if is_bounce:
+                        increments["bounces"] = 1
+                        await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"bounced_at": datetime.now(timezone.utc)}})
+                        await db.scheduled_emails.update_many({"campaign_id": item["campaign_id"], "recipient_id": item["recipient_id"], "status": "scheduled"}, {"$set": {"status": "cancelled", "error": "Cancelled after bounce"}})
+                        await db.suppressions.update_one({"user_id": campaign.get("user_id"), "email": recipient["email"].strip().lower()}, {"$set": {"reason": "bounced", "updated_at": datetime.now(timezone.utc)}, "$setOnInsert": {"created_at": datetime.now(timezone.utc)}}, upsert=True)
+                        await emit_campaign_event(campaign, "bounced", {"scheduled_email_id": item["id"], "recipient_email": recipient["email"], "error": error_text})
+                    await db.campaigns.update_one({"id": item["campaign_id"]}, {"$inc": increments})
+                    if is_bounce:
+                        refreshed = await db.campaigns.find_one({"id": item["campaign_id"]})
+                        sent_total = max(1, int((refreshed or {}).get("sent_count", 0)) + int((refreshed or {}).get("failed_count", 0)))
+                        bounce_rate = (int((refreshed or {}).get("bounces", 0)) / sent_total) * 100
+                        threshold = float((refreshed or {}).get("bounce_auto_pause_rate", 5.0))
+                        if threshold > 0 and sent_total >= 10 and bounce_rate >= threshold:
+                            await db.campaigns.update_one({"id": item["campaign_id"]}, {"$set": {"status": "paused", "auto_paused_reason": f"Bounce rate {bounce_rate:.1f}% reached safety threshold {threshold:.1f}%"}})
             active_ids = await db.campaigns.distinct("id", {"campaign_type": "rohly_template", "status": "active"})
             for campaign_id in active_ids:
                 pending = await db.scheduled_emails.count_documents({"campaign_id": campaign_id, "source_type": "rohly_template", "status": {"$in": ["scheduled", "sending"]}})
                 if pending == 0:
+                    completed_campaign = await db.campaigns.find_one({"id": campaign_id})
                     await db.campaigns.update_one({"id": campaign_id}, {"$set": {"status": "completed", "next_send_at": None}})
+                    if completed_campaign:
+                        await emit_campaign_event(completed_campaign, "campaign_completed", {"campaign_id": campaign_id})
                 else:
                     nxt = await db.scheduled_emails.find_one({"campaign_id": campaign_id, "source_type": "rohly_template", "status": "scheduled"}, sort=[("scheduled_at", 1)])
                     await db.campaigns.update_one({"id": campaign_id}, {"$set": {"next_send_at": nxt["scheduled_at"] if nxt else None}})
