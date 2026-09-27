@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { Activity, ArrowRight, LockKeyhole } from "lucide-react";
 import { apiPost, ApiError } from "@/lib/api";
