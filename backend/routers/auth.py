@@ -80,6 +80,7 @@ async def _create_verification(user_id: str, email: str, name: str) -> None:
         raise
 
 async def ensure_owner() -> None:
+    await db.users.update_many({"email_verified": {"$exists": False}}, {"$set": {"email_verified": True}})
     email = os.environ.get("OWNER_EMAIL", "").strip().lower()
     password = os.environ.get("OWNER_PASSWORD", "")
     if not email or not password:
