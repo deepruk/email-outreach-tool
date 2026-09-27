@@ -78,8 +78,10 @@ async def use_recipient_list(source_id: str) -> dict:
         for item in existing_rows
         if item.get("email")
     }
+    # Only block contacts that are currently queued/sending in another campaign.
+    # Historical sent/cancelled records should not prevent reusing a lead in a new campaign.
     used_rows = await db.scheduled_emails.find(
-        {},
+        {"status": {"$in": ["scheduled", "sending"]}},
         {"recipient_email": 1, "_id": 0},
     ).to_list(100000)
     used_emails = {
