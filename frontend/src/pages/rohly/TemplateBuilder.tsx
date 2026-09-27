@@ -20,7 +20,7 @@ type Step = {
 };
 
 type RecipientList = { id: string; filename: string; row_count: number; columns: string[]; uploaded_at: string };
-type UseListResponse = { source_id: string; filename: string; recipient_ids: string[]; count: number };
+type UseListResponse = { source_id: string; filename: string; recipient_ids: string[]; count: number; duplicate_count?: number; skipped_duplicates?: number };
 type CreatedCampaign = { id: string };
 
 const VARIABLES = ["{{first_name}}", "{{name}}", "{{email}}", "{{company}}", "{{job_title}}", "{{industry}}", "{{city}}", "{{country}}"];
@@ -97,7 +97,12 @@ export default function TemplateBuilder() {
       setSelectedLists((current) => Array.from(new Set([...current, result.source_id])));
       setListRecipientMap((current) => ({ ...current, [result.source_id]: result.recipient_ids }));
       await queryClient.invalidateQueries({ queryKey: ["rohly-campaign-recipients"] });
-      toast.success(`${result.count} contacts added from ${result.filename}`);
+      const duplicates = result.duplicate_count ?? result.skipped_duplicates ?? 0;
+      if (duplicates > 0) {
+        toast.success(`${result.count} new contacts added from ${result.filename}; ${duplicates} duplicates skipped`);
+      } else {
+        toast.success(`${result.count} contacts added from ${result.filename}`);
+      }
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add this list"),
   });
@@ -247,7 +252,7 @@ export default function TemplateBuilder() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="font-heading text-lg font-medium">Recipients</h2>
-                <p className="mt-1 text-xs text-slate-500">Choose leads already in Rohly or add an imported list.</p>
+                <p className="mt-1 text-xs text-slate-500">Choose leads already in Rohly or add a list. Existing and previously used contacts are automatically skipped.</p>
               </div>
               <div className="flex items-center gap-3">
                 <Button type="button" variant="outline" size="sm" onClick={() => setListPickerOpen(true)} className="gap-1">
