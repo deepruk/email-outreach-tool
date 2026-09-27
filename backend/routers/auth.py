@@ -63,8 +63,15 @@ def _send_verification_email(email: str, name: str, token: str) -> None:
     message["From"] = sender
     message["To"] = email
     message.set_content("Hi " + name + ",\n\nVerify your Rohly account:\n" + _verification_url(token) + "\n\nThis link expires in 24 hours.")
+    security = os.environ.get("SMTP_SECURITY", "starttls").strip().lower()
+    if security == "ssl":
+        with smtplib.SMTP_SSL(host, port, timeout=20) as smtp:
+            smtp.login(user, password)
+            smtp.send_message(message)
+        return
     with smtplib.SMTP(host, port, timeout=20) as smtp:
-        smtp.starttls()
+        if security == "starttls":
+            smtp.starttls()
         smtp.login(user, password)
         smtp.send_message(message)
 
@@ -76,7 +83,7 @@ async def _create_verification(user_id: str, email: str, name: str) -> None:
     try:
         await asyncio.to_thread(_send_verification_email, email, name, raw)
     except Exception:
-        await db.email_verifications.delete_many({"user_id": user_id})
+        # Keep the token so the account can recover through resend once mail delivery is fixed.
         raise
 
 async def ensure_owner() -> None:
@@ -161,8 +168,8 @@ async def signup(input: SignupRequest) -> dict:
     try:
         await _create_verification(user.id, user.email, user.name)
     except Exception as exc:
-        await db.users.delete_one({"id": user.id})
-        raise HTTPException(status_code=503, detail="We could not send the verification email. Please try again later.") from exc
+        # Keep the unverified account instead of destroying signup state when the mail provider is temporarily unavailable.
+        raise HTTPException(status_code=503, detail="Your account was created, but we could not send the verification email. Use Resend verification after email delivery is restored.") from exc
     return {"verification_required": True, "email": user.email}
 
 
