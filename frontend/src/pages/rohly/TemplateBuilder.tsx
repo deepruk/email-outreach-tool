@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ArrowRight, Braces, CalendarClock, Check, ChevronDown, FileSpreadsheet,
+  ArrowLeft, ArrowRight, Braces, CalendarClock, Check, FileSpreadsheet,
   FlaskConical, Mail, Plus, RefreshCw, Rocket, Settings2, Trash2, Upload, Users, X
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
@@ -636,13 +636,17 @@ function SettingsStep(props: {
 
       <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
         <div className="space-y-1">
-          {[
+          {([
             [Settings2, "Schedule Configuration"],
             [Mail, "Campaign Behavior"],
             [Braces, "Delivery Optimization"],
             [Rocket, "AI & Automation"],
             [Check, "Protection & Limits"],
-          ].map(([Icon, label], index) => <div key={label as string} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-xs font-semibold ${index === 0 ? "bg-violet-50 text-violet-600" : "text-slate-500"}`}><Icon size={14} />{label as string}</div>)}
+          ] as const).map(([Icon, label], index) => (
+            <div key={label} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-xs font-semibold ${index === 0 ? "bg-violet-50 text-violet-600" : "text-slate-500"}`}>
+              <Icon size={14} />{label}
+            </div>
+          ))})}
         </div>
 
         <div className="space-y-4">
