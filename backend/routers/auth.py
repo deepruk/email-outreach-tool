@@ -4,11 +4,15 @@ import hashlib
 import hmac
 import os
 import secrets
+import asyncio
+import smtplib
+from email.message import EmailMessage
+from urllib.parse import quote
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 
 from lib.db import db
-from models.auth import LoginRequest, PasswordUpdate, ProfileUpdate, SignupRequest, UserPublic, UserRecord
+from models.auth import LoginRequest, PasswordUpdate, ProfileUpdate, SignupRequest, UserPublic, UserRecord, VerifyEmailRequest, ResendVerificationRequest
 from models.scheduler import new_id
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -34,6 +38,47 @@ def verify_password(password: str, encoded: str) -> bool:
         return False
 
 
+
+VERIFICATION_TTL_HOURS = 24
+
+def _verification_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def _verification_url(token: str) -> str:
+    app_url = os.environ.get("APP_URL", "").rstrip("/")
+    if not app_url:
+        raise RuntimeError("APP_URL is not configured")
+    return f"{app_url}/verify-email?token={quote(token)}"
+
+def _send_verification_email(email: str, name: str, token: str) -> None:
+    host = os.environ.get("SMTP_HOST", "").strip()
+    user = os.environ.get("SMTP_USER", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    if not host or not user or not password:
+        raise RuntimeError("SMTP_HOST, SMTP_USER and SMTP_PASSWORD must be configured")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    sender = os.environ.get("SMTP_FROM", user).strip()
+    message = EmailMessage()
+    message["Subject"] = "Verify your Rohly account"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content("Hi " + name + ",\n\nVerify your Rohly account:\n" + _verification_url(token) + "\n\nThis link expires in 24 hours.")
+    with smtplib.SMTP(host, port, timeout=20) as smtp:
+        smtp.starttls()
+        smtp.login(user, password)
+        smtp.send_message(message)
+
+async def _create_verification(user_id: str, email: str, name: str) -> None:
+    raw = secrets.token_urlsafe(48)
+    expires = datetime.now(timezone.utc) + timedelta(hours=VERIFICATION_TTL_HOURS)
+    await db.email_verifications.delete_many({"user_id": user_id})
+    await db.email_verifications.insert_one({"user_id": user_id, "token_hash": _verification_hash(raw), "expires_at": expires, "created_at": datetime.now(timezone.utc)})
+    try:
+        await asyncio.to_thread(_send_verification_email, email, name, raw)
+    except Exception:
+        await db.email_verifications.delete_many({"user_id": user_id})
+        raise
+
 async def ensure_owner() -> None:
     email = os.environ.get("OWNER_EMAIL", "").strip().lower()
     password = os.environ.get("OWNER_PASSWORD", "")
@@ -49,6 +94,7 @@ async def ensure_owner() -> None:
         role="owner",
         created_at=datetime.now(timezone.utc),
         password_hash=hash_password(password),
+        email_verified=True,
     )
     await db.users.insert_one(owner.model_dump())
 
