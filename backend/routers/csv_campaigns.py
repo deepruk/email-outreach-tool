@@ -127,13 +127,13 @@ def preview_from_source(source: CsvSource, input: CsvCampaignCreate, limit: int 
     return CsvCampaignPreview(leads=leads, valid_count=valid_count, skipped_count=skipped_count)
 
 
-async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tuple[list[ScheduledEmail], int]:
+async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate, user: UserPublic) -> tuple[list[ScheduledEmail], int]:
     source_row = await db.csv_sources.find_one({"id": input.source_id, "user_id": user.id})
     if not source_row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     source = CsvSource(**source_row)
     preview = preview_from_source(source, input, limit=0)
-    inbox_rows = await db.inboxes.find({"id": {"$in": input.inbox_ids}, "status": "connected"}).to_list(100)
+    inbox_rows = await db.inboxes.find({"id": {"$in": input.inbox_ids}, "status": "connected", "user_id": user.id}).to_list(100)
     inbox_lookup = {row["id"]: Inbox(**row) for row in inbox_rows}
     inboxes = [inbox_lookup[inbox_id] for inbox_id in input.inbox_ids if inbox_id in inbox_lookup]
     if len(inboxes) != len(set(input.inbox_ids)):
@@ -146,6 +146,7 @@ async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tup
     existing_other = await db.scheduled_emails.find({
         "campaign_id": {"$ne": campaign_id},
         "inbox_id": {"$in": input.inbox_ids},
+        "user_id": user.id,
         "status": {"$in": ["scheduled", "sending", "sent"]},
     }).to_list(100000)
     usage: dict[tuple[str, str], int] = {}
@@ -392,7 +393,7 @@ async def list_campaigns(user: UserPublic = Depends(require_user)) -> list[CsvCa
 async def preview_edit_impact(campaign_id: str, input: CsvCampaignCreate, user: UserPublic = Depends(require_user)) -> CampaignEditImpact:
     if not await db.csv_campaigns.find_one({"id": campaign_id, "user_id": user.id}):
         raise HTTPException(status_code=404, detail="CSV campaign not found")
-    proposed, skipped = await build_edit_schedule(campaign_id, input)
+    proposed, skipped = await build_edit_schedule(campaign_id, input, user)
     return await calculate_edit_impact(campaign_id, proposed, skipped)
 
 
@@ -471,7 +472,7 @@ async def edit_campaign(campaign_id: str, input: CsvCampaignCreate, user: UserPu
             replacement = []
         await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "status": "scheduled"})
         if replacement:
-            await db.scheduled_emails.insert_many([row.model_dump() for row in replacement])
+            await db.scheduled_emails.insert_many([{**row.model_dump(), "user_id": user.id} for row in replacement])
         updates = {
             **input.model_dump(),
             "source_filename": source_row["filename"],
@@ -512,10 +513,10 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
         min_gap_minutes=campaign.min_gap_minutes,
         max_gap_minutes=campaign.max_gap_minutes,
     )
-    scheduled, skipped = await build_edit_schedule(campaign.id, configuration)
+    scheduled, skipped = await build_edit_schedule(campaign.id, configuration, user)
     if not scheduled:
         raise HTTPException(status_code=422, detail="No complete emails are available to schedule")
-    await db.scheduled_emails.insert_many([item.model_dump() for item in scheduled])
+    await db.scheduled_emails.insert_many([{**item.model_dump(), "user_id": user.id} for item in scheduled])
     launched_at = datetime.now(timezone.utc)
     updates = {
         "status": "running",
