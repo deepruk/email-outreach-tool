@@ -16,12 +16,14 @@ export default function Campaigns() {
   const [search, setSearch] = useState("");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const query = useQuery({ queryKey: ["csv-campaigns"], queryFn: () => apiGet<CsvCampaign[]>("/csv/campaigns") });
+  const rohlyQuery = useQuery({ queryKey: ["rohly-campaigns"], queryFn: () => apiGet<any[]>("/workspace/rohly-campaigns/campaigns") });
 
   const status = useMutation({
     mutationFn: ({ id, value }: { id: string; value: "running" | "paused" | "stopped" }) =>
       apiPatch<CsvCampaign>(`/csv/campaigns/${id}/status`, { status: value }),
     onSuccess: (_, variables) => {
       client.invalidateQueries({ queryKey: ["csv-campaigns"] });
+      client.invalidateQueries({ queryKey: ["rohly-campaigns"] });
       setOpenMenu(null);
       toast.success(`Campaign ${variables.value}`);
     },
@@ -48,15 +50,31 @@ export default function Campaigns() {
     }
   };
 
-  const campaigns = (query.data ?? [])
+  const rohlyCampaigns = (rohlyQuery.data ?? []).map((campaign) => ({
+    id: campaign.id,
+    name: campaign.name,
+    source_filename: "Rohly Template",
+    total_leads: campaign.total_count ?? 0,
+    emails_sent: campaign.sent_count ?? 0,
+    replies: 0,
+    positive_replies: 0,
+    failed_emails: campaign.failed_count ?? 0,
+    steps: campaign.steps ?? [],
+    status: campaign.status === "active" ? "running" : campaign.status === "queued" ? "draft" : campaign.status,
+    created_at: campaign.created_at,
+    launched_at: campaign.launched_at,
+    is_rohly: true,
+  } as unknown as CsvCampaign));
+
+  const campaigns = ([...(query.data ?? []), ...rohlyCampaigns])
     .filter((campaign) => tab === "all" || (tab === "running" ? campaign.status === "running" : tab === "paused" ? campaign.status === "paused" : ["stopped", "completed"].includes(campaign.status)))
     .filter((campaign) => campaign.name.toLowerCase().includes(search.toLowerCase()) || campaign.source_filename.toLowerCase().includes(search.toLowerCase()));
 
   const counts = {
-    all: query.data?.length ?? 0,
-    running: query.data?.filter((c) => c.status === "running").length ?? 0,
-    paused: query.data?.filter((c) => c.status === "paused").length ?? 0,
-    stopped: query.data?.filter((c) => ["stopped", "completed"].includes(c.status)).length ?? 0,
+    all: campaigns.length,
+    running: campaigns.filter((c) => c.status === "running").length,
+    paused: campaigns.filter((c) => c.status === "paused").length,
+    stopped: campaigns.filter((c) => ["stopped", "completed"].includes(c.status)).length,
   };
 
   return (
