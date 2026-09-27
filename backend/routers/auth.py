@@ -87,17 +87,22 @@ async def ensure_owner() -> None:
         return
     existing = await db.users.find_one({"email": email})
     if existing:
-        return
-    owner = UserRecord(
-        id=new_id(),
-        email=email,
-        name=os.environ.get("OWNER_NAME", "Deepanshu"),
-        role="owner",
-        created_at=datetime.now(timezone.utc),
-        password_hash=hash_password(password),
-        email_verified=True,
-    )
-    await db.users.insert_one(owner.model_dump())
+        owner_id = existing["id"]
+    else:
+        owner = UserRecord(
+            id=new_id(),
+            email=email,
+            name=os.environ.get("OWNER_NAME", "Deepanshu"),
+            role="owner",
+            created_at=datetime.now(timezone.utc),
+            password_hash=hash_password(password),
+            email_verified=True,
+        )
+        await db.users.insert_one(owner.model_dump())
+        owner_id = owner.id
+    for collection_name in ("campaigns", "csv_campaigns", "csv_sources", "inboxes", "recipients", "templates", "rohly_drafts", "activities", "history", "scheduled_emails", "oauth_tokens"):
+        await db[collection_name].update_many({"user_id": {"$exists": False}}, {"$set": {"user_id": owner_id}})
+
 
 
 async def require_user(rohly_session: str | None = Cookie(default=None)) -> UserPublic:
