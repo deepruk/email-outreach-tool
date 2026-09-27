@@ -3,12 +3,14 @@ import type { Dispatch, SetStateAction } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Braces, Check, Clock3, FileSpreadsheet, Mail, Plus, RefreshCw, Rocket, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft, ArrowRight, Braces, CalendarClock, Check, ChevronDown, FileSpreadsheet,
+  FlaskConical, Mail, Plus, RefreshCw, Rocket, Settings2, Trash2, Upload, Users, X
+} from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import type { Inbox, Recipient, Template } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageHeader, Surface } from "@/components/rohly/Primitives";
 
 type Step = {
   label: string;
@@ -45,13 +47,16 @@ const emptyStep = (index: number): Step => ({
   label: index === 0 ? "Initial email" : `Follow-up ${index}`,
   delay_days: index === 0 ? 0 : index === 1 ? 2 : 3,
   template_name: index === 0 ? "Initial outreach" : `Follow-up ${index}`,
-  subject: index === 0 ? "" : "",
+  subject: "",
   body: "",
 });
+
+const stepLabels = ["Lead List", "Sequence", "Email Accounts", "SubSequences", "Settings"];
 
 export default function TemplateBuilder() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [activeStep, setActiveStep] = useState(0);
   const [name, setName] = useState("Rohly outreach campaign");
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [selectedInboxes, setSelectedInboxes] = useState<string[]>([]);
@@ -68,6 +73,9 @@ export default function TemplateBuilder() {
   const [previewRecipient, setPreviewRecipient] = useState("");
   const [testEmail, setTestEmail] = useState("");
   const [testPassed, setTestPassed] = useState(false);
+  const [stopOnReply, setStopOnReply] = useState(true);
+  const [followUpPriority, setFollowUpPriority] = useState(100);
+  const [distributionMode, setDistributionMode] = useState<"pattern" | "random">("pattern");
 
   const recipientsQuery = useQuery({
     queryKey: ["rohly-campaign-recipients"],
@@ -80,10 +88,6 @@ export default function TemplateBuilder() {
   const listsQuery = useQuery({
     queryKey: ["rohly-recipient-lists"],
     queryFn: () => apiGet<RecipientList[]>("/workspace/rohly-campaign-lists"),
-  });
-  const templatesQuery = useQuery({
-    queryKey: ["rohly-campaign-templates"],
-    queryFn: () => apiGet<Template[]>("/workspace/rohly-campaigns/templates"),
   });
 
   const recipients = recipientsQuery.data ?? [];
@@ -100,11 +104,9 @@ export default function TemplateBuilder() {
       setListRecipientMap((current) => ({ ...current, [result.source_id]: result.recipient_ids }));
       await queryClient.invalidateQueries({ queryKey: ["rohly-campaign-recipients"] });
       const duplicates = result.duplicate_count ?? result.skipped_duplicates ?? 0;
-      if (duplicates > 0) {
-        toast.success(`${result.count} new contacts added from ${result.filename}; ${duplicates} duplicates skipped`);
-      } else {
-        toast.success(`${result.count} contacts added from ${result.filename}`);
-      }
+      toast.success(duplicates > 0
+        ? `${result.count} new contacts added; ${duplicates} duplicates skipped`
+        : `${result.count} contacts added from ${result.filename}`);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add this list"),
   });
@@ -114,12 +116,15 @@ export default function TemplateBuilder() {
       if (!testEmail.trim()) throw new Error("Enter the email address where you want to receive the test");
       if (!selectedInboxes.length) throw new Error("Select a sending inbox first");
       const first = steps[0];
-      return apiPost<{ success: boolean; recipient_email: string; inbox_email: string; mode: string }>("/workspace/rohly-campaigns/test-run", {
-        inbox_id: selectedInboxes[0],
-        recipient_email: testEmail.trim(),
-        subject: previewValue(first.subject.trim(), selectedPreview).trim(),
-        body: previewValue(first.body, selectedPreview).trim(),
-      });
+      return apiPost<{ success: boolean; recipient_email: string; inbox_email: string; mode: string }>(
+        "/workspace/rohly-campaigns/test-run",
+        {
+          inbox_id: selectedInboxes[0],
+          recipient_email: testEmail.trim(),
+          subject: previewValue(first.subject.trim(), selectedPreview).trim(),
+          body: previewValue(first.body, selectedPreview).trim(),
+        }
+      );
     },
     onSuccess: (result) => {
       setTestPassed(true);
@@ -142,7 +147,6 @@ export default function TemplateBuilder() {
         });
         templateIds.push(template.id);
       }
-
       const created = await apiPost<CreatedCampaign>("/workspace/rohly-campaigns", {
         name,
         inbox_ids: selectedInboxes,
@@ -159,7 +163,6 @@ export default function TemplateBuilder() {
         sending_window_end: sendingWindowEnd,
         sending_days: sendingDays,
       });
-
       await apiPost(`/workspace/rohly-campaigns/${created.id}/launch`, {});
       return created;
     },
@@ -175,6 +178,26 @@ export default function TemplateBuilder() {
     setter((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   };
 
+  const updateStep = (index: number, patch: Partial<Step>) => {
+    setTestPassed(false);
+    setSteps((current) => current.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step));
+  };
+
+  const addFollowUp = () => {
+    setTestPassed(false);
+    setSteps((current) => [...current, emptyStep(current.length)]);
+  };
+
+  const removeStep = (index: number) => {
+    setTestPassed(false);
+    setSteps((current) => current.filter((_, stepIndex) => stepIndex !== index));
+  };
+
+  const insertVariable = (index: number, variable: string, field: "subject" | "body") => {
+    const step = steps[index];
+    updateStep(index, { [field]: step[field] + variable });
+  };
+
   const removeRecipientList = (sourceId: string) => {
     const idsToRemove = new Set(listRecipientMap[sourceId] ?? []);
     setSelectedLists((current) => current.filter((id) => id !== sourceId));
@@ -184,291 +207,501 @@ export default function TemplateBuilder() {
       return next;
     });
     setSelectedRecipients((current) => current.filter((id) => !idsToRemove.has(id)));
-    toast.success("Recipient list removed from this campaign");
-  };
-
-  const updateStep = (index: number, patch: Partial<Step>) => {
     setTestPassed(false);
-    setSteps((current) => current.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step));
   };
 
-  const addFollowUp = () => setSteps((current) => [...current, emptyStep(current.length)]);
-
-  const removeStep = (index: number) =>
-    setSteps((current) => current.filter((_, stepIndex) => stepIndex !== index));
-
-  const insertVariable = (index: number, variable: string, field: "subject" | "body") => {
-    const step = steps[index];
-    setTestPassed(false);
-    updateStep(index, { [field]: step[field] + variable });
-  };
-
-  const validateAndLaunch = () => {
-    if (!name.trim()) return toast.error("Enter a campaign name");
-    if (!selectedRecipients.length) return toast.error("Select at least one recipient or add a recipient list");
-    if (!selectedInboxes.length) return toast.error("Select at least one sending inbox");
-    if (steps.some((step) => !step.template_name.trim() || !step.subject.trim() || !step.body.trim())) {
-      return toast.error("Complete the template name, subject, and body for every email step");
+  const validate = () => {
+    if (!name.trim()) return "Enter a campaign name";
+    if (!selectedRecipients.length) return "Select at least one lead or add a recipient list";
+    if (!selectedInboxes.length) return "Select at least one sending inbox";
+    if (!steps.length || steps.some((step) => !step.template_name.trim() || !step.subject.trim() || !step.body.trim())) {
+      return "Complete the template name, subject, and body for every sequence step";
     }
-    if (steps.slice(1).some((step) => step.delay_days < 1)) return toast.error("Follow-ups must be at least 1 day after the previous email");
-    if (minGapMinutes < 1 || maxGapMinutes < minGapMinutes) return toast.error("Enter a valid minimum/maximum email gap");
-    if (sendingWindowStart >= sendingWindowEnd) return toast.error("Working-hours start must be before the end time");
-    if (!sendingDays.length) return toast.error("Select at least one working day");
-    if (!testPassed) return toast.error("Run a successful test email before launching the campaign");
+    if (steps.slice(1).some((step) => step.delay_days < 1)) return "Follow-ups must be at least 1 day after the previous email";
+    if (minGapMinutes < 1 || maxGapMinutes < minGapMinutes) return "Enter a valid minimum/maximum email gap";
+    if (sendingWindowStart >= sendingWindowEnd) return "Working-hours start must be before the end time";
+    if (!sendingDays.length) return "Select at least one working day";
+    if (!testPassed) return "Run a successful test email before launching";
+    return null;
+  };
+
+  const reviewAndLaunch = () => {
+    const error = validate();
+    if (error) {
+      toast.error(error);
+      if (!selectedRecipients.length) setActiveStep(0);
+      else if (!steps.length || steps.some((step) => !step.subject.trim() || !step.body.trim())) setActiveStep(1);
+      else if (!selectedInboxes.length) setActiveStep(2);
+      else if (!testPassed) setActiveStep(4);
+      return;
+    }
     createMutation.mutate();
   };
 
+  const canNext = () => {
+    if (activeStep === 0) return Boolean(selectedRecipients.length);
+    if (activeStep === 1) return Boolean(steps.length && steps.every((step) => step.subject.trim() && step.body.trim()));
+    if (activeStep === 2) return Boolean(selectedInboxes.length);
+    return true;
+  };
+
   return (
-    <div data-testid="template-campaign-wizard-page">
-      <Link to="/campaigns" className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
-        <ArrowLeft size={13} /> Campaigns
-      </Link>
-
-      <PageHeader
-        eyebrow="New campaign"
-        title="Create your outreach campaign"
-        description="Write your email directly in Rohly, personalize it with variables, add follow-ups, choose your leads and inboxes, then launch."
-      />
-
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_.65fr]">
-        <div className="space-y-4">
-          <Surface className="p-5" testId="template-campaign-details">
-            <h2 className="font-heading text-lg font-medium">Campaign details</h2>
-            <label className="mt-4 block text-xs font-semibold">
-              Campaign name
-              <Input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 h-10" />
-            </label>
-          </Surface>
-
-          <Surface className="p-5" testId="template-campaign-inboxes">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-heading text-lg font-medium">Sending inboxes</h2>
-                <p className="mt-1 text-xs text-slate-500">Select Gmail inboxes for this campaign. Emails are distributed round-robin.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => inboxesQuery.refetch()} className="gap-1">
-                  <RefreshCw size={13} /> Refresh
-                </Button>
-                <Link to="/inboxes" className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                  <Plus size={13} /> Connect inbox
-                </Link>
-                <span className="text-xs font-semibold text-blue-700">{selectedInboxes.length} selected</span>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {inboxes.length ? inboxes.map((inbox) => (
-                <label key={inbox.id} className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 hover:bg-slate-50 ${selectedInboxes.includes(inbox.id) ? "border-blue-300 bg-blue-50/40" : "border-slate-200"}`}>
-                  <input type="checkbox" checked={selectedInboxes.includes(inbox.id)} onChange={() => toggle(setSelectedInboxes, inbox.id)} className="size-4 accent-blue-700" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{inbox.display_name}</p>
-                    <p className="text-xs text-slate-500">{inbox.email}</p>
-                  </div>
-                  <span className="text-xs text-slate-500">{inbox.daily_sending_limit}/day</span>
-                </label>
-              )) : (
-                <div className="p-5 text-center">
-                  <p className="text-sm text-slate-500">No connected Gmail inboxes found.</p>
-                  <Link to="/inboxes" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700">
-                    <Plus size={13} /> Connect a Gmail inbox
-                  </Link>
-                </div>
-              )}
-            </div>
-          </Surface>
-
-          <Surface className="p-5" testId="template-campaign-recipients">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-heading text-lg font-medium">Recipients</h2>
-                <p className="mt-1 text-xs text-slate-500">Choose leads already in Rohly or add a list. Existing and previously used contacts are automatically skipped.</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" size="sm" onClick={() => setListPickerOpen(true)} className="gap-1">
-                  <FileSpreadsheet size={13} /> Add recipient list
-                </Button>
-                <span className="text-xs font-semibold text-blue-700">{selectedRecipients.length} selected</span>
-              </div>
-            </div>
-
-            {selectedLists.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {selectedLists.map((sourceId) => {
-                  const list = lists.find((item) => item.id === sourceId);
-                  return <span key={sourceId} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700"><Check size={11} /> {list?.filename || "Imported list"}<button type="button" aria-label={`Remove ${list?.filename || "imported list"}`} onClick={() => removeRecipientList(sourceId)} className="ml-1 rounded-full p-0.5 text-blue-500 hover:bg-blue-100 hover:text-blue-800"><X size={11} /></button></span>;
-                })}
-              </div>
-            )}
-
-            <div className="mt-4 max-h-64 divide-y divide-slate-100 overflow-auto rounded-md border border-slate-200">
-              {recipients.length ? recipients.map((recipient) => (
-                <label key={recipient.id} className="flex cursor-pointer items-center gap-3 p-3 hover:bg-slate-50">
-                  <input type="checkbox" checked={selectedRecipients.includes(recipient.id)} onChange={() => toggle(setSelectedRecipients, recipient.id)} className="size-4 accent-blue-700" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{recipient.name}</p>
-                    <p className="truncate text-xs text-slate-500">{recipient.email}{recipient.company ? ` · ${recipient.company}` : ""}</p>
-                  </div>
-                </label>
-              )) : (
-                <div className="p-6 text-center text-sm text-slate-500">No recipients yet. Add a recipient list to get started.</div>
-              )}
-            </div>
-          </Surface>
-
-          <Surface className="p-5" testId="template-campaign-sequence">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-heading text-lg font-medium">Email sequence</h2>
-                <p className="mt-1 text-xs text-slate-500">Write each email directly here, just like a modern outreach platform.</p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={addFollowUp} className="gap-1">
-                <Plus size={14} /> Add follow-up
-              </Button>
-            </div>
-
-            <div className="mt-5 space-y-4">
-              {steps.map((step, index) => (
-                <div key={index} className="rounded-lg border border-slate-200 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-7 items-center justify-center rounded-full bg-slate-100 text-xs font-bold">{index + 1}</div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold">{step.label}</p>
-                      {index > 0 && <p className="text-[11px] text-slate-500">Days after previous email</p>}
-                    </div>
-                    {index > 0 && <Button type="button" variant="ghost" size="icon" onClick={() => removeStep(index)}><Trash2 size={15} /></Button>}
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    <label className="block text-xs font-semibold">
-                      Template name
-                      <Input value={step.template_name} onChange={(event) => updateStep(index, { template_name: event.target.value })} className="mt-2 h-10" />
-                    </label>
-
-                    <label className="block text-xs font-semibold">
-                      Subject
-                      <Input value={step.subject} onChange={(event) => updateStep(index, { subject: event.target.value })} placeholder="Hi {{first_name}} — quick question" className="mt-2 h-10" />
-                    </label>
-
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold">Email body</label>
-                        <span className="text-[10px] font-medium text-slate-400">Click a variable to insert it</span>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {VARIABLES.map((variable) => (
-                          <button type="button" key={variable} onClick={() => insertVariable(index, variable, "body")} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700">
-                            {variable}
-                          </button>
-                        ))}
-                      </div>
-                      <textarea
-                        value={step.body}
-                        onChange={(event) => updateStep(index, { body: event.target.value })}
-                        placeholder={"Hi {{first_name}},\n\nI wanted to reach out about {{company}}..."}
-                        rows={10}
-                        className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
-                      <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-500"><Braces size={12} /> Variables are replaced automatically for every recipient before sending.</p>
-                    </div>
-
-                    {index > 0 && (
-                      <label className="block max-w-48 text-xs font-semibold">
-                        Delay after previous email
-                        <Input type="number" min={1} value={step.delay_days} onChange={(event) => updateStep(index, { delay_days: Number(event.target.value) })} className="mt-2 h-10" />
-                      </label>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Surface>
-
-          <Surface className="p-5" testId="template-campaign-schedule">
-            <div className="flex items-center gap-2"><Clock3 size={16} /><h2 className="font-heading text-lg font-medium">Sending schedule</h2></div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="text-xs font-semibold">Timezone<select value={timezone} onChange={(event) => setTimezone(event.target.value)} className="mt-2 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"><option>Asia/Kolkata</option><option>America/Toronto</option><option>America/New_York</option><option>Europe/London</option><option>UTC</option></select></label>
-              <div className="grid grid-cols-2 gap-2"><label className="text-xs font-semibold">Min gap<Input type="number" min={1} value={minGapMinutes} onChange={(event) => setMinGapMinutes(Number(event.target.value))} className="mt-2 h-10" /></label><label className="text-xs font-semibold">Max gap<Input type="number" min={1} value={maxGapMinutes} onChange={(event) => setMaxGapMinutes(Number(event.target.value))} className="mt-2 h-10" /></label></div>
-              <label className="text-xs font-semibold">Start time<Input type="time" value={sendingWindowStart} onChange={(event) => setSendingWindowStart(event.target.value)} className="mt-2 h-10" /></label>
-              <label className="text-xs font-semibold">End time<Input type="time" value={sendingWindowEnd} onChange={(event) => setSendingWindowEnd(event.target.value)} className="mt-2 h-10" /></label>
-            </div>
-            <div className="mt-4"><p className="text-xs font-semibold">Working days</p><div className="mt-2 flex flex-wrap gap-2">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day, index) => <button type="button" key={day} onClick={() => setSendingDays((current) => current.includes(index) ? current.filter((value) => value !== index) : [...current, index])} className={`rounded-md border px-3 py-1.5 text-xs font-medium ${sendingDays.includes(index) ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{day}</button>)}</div></div>
-          </Surface>
+    <div data-testid="template-campaign-wizard-page" className="-mx-4 -mt-4 min-h-[calc(100vh-5rem)] bg-slate-50 sm:-mx-6 lg:-mx-7">
+      <div className="border-b border-slate-200 bg-white px-6 py-4">
+        <div className="flex items-center justify-between gap-4">
+          <Link to="/campaigns" className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-violet-600">
+            <ArrowLeft size={14} /> Campaigns
+          </Link>
+          <Button
+            onClick={reviewAndLaunch}
+            disabled={createMutation.isPending}
+            className="h-9 bg-violet-600 px-4 text-xs font-semibold hover:bg-violet-700 disabled:opacity-50"
+          >
+            <Rocket size={14} /> {createMutation.isPending ? "Launching…" : "Review and Launch"}
+          </Button>
         </div>
+        <div className="mt-2 flex items-center gap-3">
+          <Input value={name} onChange={(event) => { setName(event.target.value); setTestPassed(false); }} className="h-8 w-72 border-0 bg-transparent px-0 text-[15px] font-bold shadow-none focus:ring-0" />
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-500">Draft</span>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">Configure your email campaign</p>
 
-        <div className="space-y-4">
-          <Surface className="sticky top-4 p-5" testId="template-campaign-preview">
-            <div className="flex items-center gap-2"><Braces size={15} /><h2 className="font-heading text-lg font-medium">Live preview</h2></div>
-            <select value={previewRecipient} onChange={(event) => setPreviewRecipient(event.target.value)} className="mt-4 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
-              <option value="">Preview sample lead</option>
-              {recipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.name} · {recipient.company || recipient.email}</option>)}
-            </select>
-            <div className="mt-5 rounded-lg border border-slate-200 p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">{steps[0]?.label}</p>
-              <p className="mt-3 text-sm font-semibold">{previewValue(steps[0]?.subject || "Your personalized subject", selectedPreview)}</p>
-              <div className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-700">{previewValue(steps[0]?.body || "Write your email body on the left to see the personalized preview here.", selectedPreview)}</div>
-            </div>
-            <div className="mt-5 rounded-md bg-blue-50 p-3 text-xs leading-5 text-blue-800">
-              <strong>Personalization:</strong> Use the variable buttons in each email. Rohly fills the values for every lead before sending.
-            </div>
-            <div className="mt-5 rounded-lg border border-slate-200 p-4">
-              <div className="flex items-center gap-2">
-                <Mail size={15} />
-                <h3 className="text-sm font-semibold">Test before launch</h3>
-                {testPassed && <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700"><Check size={11} /> Test passed</span>}
-              </div>
-              <p className="mt-1 text-[11px] leading-5 text-slate-500">Send the first email to yourself first. The campaign will stay inactive until the test succeeds.</p>
-              <Input
-                value={testEmail}
-                onChange={(event) => { setTestEmail(event.target.value); setTestPassed(false); }}
-                placeholder="your@email.com"
-                type="email"
-                className="mt-3 h-10"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => testMutation.mutate()}
-                disabled={testMutation.isPending || createMutation.isPending}
-                className="mt-2 w-full gap-2"
-              >
-                <Mail size={14} /> {testMutation.isPending ? "Sending test…" : "Send test email"}
-              </Button>
-            </div>
+        <div className="mt-4 flex items-center gap-1 overflow-x-auto">
+          {stepLabels.map((label, index) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setActiveStep(index)}
+              className={`relative whitespace-nowrap px-4 py-2 text-xs font-semibold transition ${activeStep === index ? "text-violet-600" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              {label}{label === "Sequence" && steps.length > 0 ? ` (${steps.length})` : ""}
+              {activeStep === index && <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-violet-600" />}
+            </button>
+          ))}
+        </div>
+      </div>
 
-            <Button onClick={validateAndLaunch} disabled={createMutation.isPending || !testPassed} className="mt-3 w-full gap-2 bg-blue-700 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">
-              <Rocket size={15} /> {createMutation.isPending ? "Creating campaign…" : testPassed ? "Launch campaign" : "Test email required"} <ArrowRight size={14} />
+      <div className="mx-auto max-w-[1500px] p-5 lg:p-7">
+        {activeStep === 0 && (
+          <LeadListStep
+            recipients={recipients}
+            selectedRecipients={selectedRecipients}
+            selectedLists={selectedLists}
+            lists={lists}
+            listPickerOpen={listPickerOpen}
+            setListPickerOpen={setListPickerOpen}
+            onToggle={(id) => toggle(setSelectedRecipients, id)}
+            onRemoveList={removeRecipientList}
+            onOpenUpload={() => navigate("/imports")}
+            onUseList={(id) => useListMutation.mutate(id)}
+            useListPending={useListMutation.isPending}
+          />
+        )}
+
+        {activeStep === 1 && (
+          <SequenceStep
+            steps={steps}
+            recipients={recipients}
+            previewRecipient={previewRecipient}
+            setPreviewRecipient={setPreviewRecipient}
+            selectedPreview={selectedPreview}
+            onUpdate={updateStep}
+            onAdd={addFollowUp}
+            onRemove={removeStep}
+            onVariable={insertVariable}
+          />
+        )}
+
+        {activeStep === 2 && (
+          <EmailAccountsStep
+            inboxes={inboxes}
+            selectedInboxes={selectedInboxes}
+            onToggle={(id) => toggle(setSelectedInboxes, id)}
+            onRefresh={() => inboxesQuery.refetch()}
+          />
+        )}
+
+        {activeStep === 3 && (
+          <SubSequencesStep />
+        )}
+
+        {activeStep === 4 && (
+          <SettingsStep
+            timezone={timezone}
+            setTimezone={setTimezone}
+            minGapMinutes={minGapMinutes}
+            setMinGapMinutes={setMinGapMinutes}
+            maxGapMinutes={maxGapMinutes}
+            setMaxGapMinutes={setMaxGapMinutes}
+            sendingWindowStart={sendingWindowStart}
+            setSendingWindowStart={setSendingWindowStart}
+            sendingWindowEnd={sendingWindowEnd}
+            setSendingWindowEnd={setSendingWindowEnd}
+            sendingDays={sendingDays}
+            setSendingDays={setSendingDays}
+            stopOnReply={stopOnReply}
+            setStopOnReply={setStopOnReply}
+            distributionMode={distributionMode}
+            setDistributionMode={setDistributionMode}
+            followUpPriority={followUpPriority}
+            setFollowUpPriority={setFollowUpPriority}
+            testEmail={testEmail}
+            setTestEmail={(value) => { setTestEmail(value); setTestPassed(false); }}
+            testPassed={testPassed}
+            testPending={testMutation.isPending}
+            onTest={() => testMutation.mutate()}
+            selectedInboxes={selectedInboxes}
+            selectedPreview={selectedPreview}
+            firstStep={steps[0]}
+          />
+        )}
+
+        <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={activeStep === 0}
+            onClick={() => setActiveStep((value) => Math.max(0, value - 1))}
+            className="gap-2"
+          >
+            <ArrowLeft size={14} /> Previous
+          </Button>
+          {activeStep < stepLabels.length - 1 ? (
+            <Button
+              type="button"
+              disabled={!canNext()}
+              onClick={() => setActiveStep((value) => Math.min(stepLabels.length - 1, value + 1))}
+              className="gap-2 bg-violet-600 hover:bg-violet-700"
+            >
+              Next: {stepLabels[activeStep + 1]} <ArrowRight size={14} />
             </Button>
-          </Surface>
+          ) : (
+            <Button
+              type="button"
+              onClick={reviewAndLaunch}
+              disabled={createMutation.isPending}
+              className="gap-2 bg-violet-600 hover:bg-violet-700"
+            >
+              <Rocket size={14} /> {createMutation.isPending ? "Launching…" : "Review and Launch"}
+            </Button>
+          )}
         </div>
       </div>
 
       {listPickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-label="Choose recipient list">
-          <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <div><h2 className="text-lg font-semibold">Choose a recipient list</h2><p className="mt-1 text-xs text-slate-500">Add an imported list to this campaign.</p></div>
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => listsQuery.refetch()} className="gap-1"><RefreshCw size={13} /> Refresh</Button>
-                <Link to="/imports" target="_blank" className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white"><Plus size={13} /> Upload list</Link>
-                <Button type="button" variant="ghost" size="icon" onClick={() => setListPickerOpen(false)}><X size={17} /></Button>
-              </div>
+        <ListPicker
+          lists={lists}
+          selectedLists={selectedLists}
+          pending={useListMutation.isPending}
+          onRefresh={() => listsQuery.refetch()}
+          onUpload={() => navigate("/imports")}
+          onClose={() => setListPickerOpen(false)}
+          onUse={(id) => useListMutation.mutate(id)}
+        />
+      )}
+    </div>
+  );
+}
+
+function LeadListStep(props: {
+  recipients: Recipient[];
+  selectedRecipients: string[];
+  selectedLists: string[];
+  lists: RecipientList[];
+  listPickerOpen: boolean;
+  setListPickerOpen: (value: boolean) => void;
+  onToggle: (id: string) => void;
+  onRemoveList: (id: string) => void;
+  onOpenUpload: () => void;
+  onUseList: (id: string) => void;
+  useListPending: boolean;
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-lg font-bold text-slate-900">Leads</h1>
+        <p className="mt-1 text-xs text-slate-500">Add and manage leads for this campaign.</p>
+      </div>
+
+      {!props.selectedRecipients.length ? (
+        <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white p-16 text-center">
+          <Users className="mx-auto size-12 rounded-xl bg-violet-50 p-3 text-violet-600" />
+          <h2 className="mt-5 text-sm font-semibold text-slate-800">No leads added yet</h2>
+          <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-slate-500">Add leads to your campaign to start sending emails. You can upload a CSV or select from your existing saved lists.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Button onClick={props.onOpenUpload} className="gap-2 bg-violet-600 hover:bg-violet-700"><Upload size={14} /> Upload CSV</Button>
+            <Button variant="outline" onClick={() => props.setListPickerOpen(true)} className="gap-2"><FileSpreadsheet size={14} /> Import from Saved Lists</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold">Leads</h2>
+              <p className="mt-1 text-[11px] text-slate-500">{props.selectedRecipients.length} leads selected</p>
             </div>
-            <div className="max-h-[60vh] overflow-auto p-5">
-              {lists.length ? lists.map((list) => {
-                const active = selectedLists.includes(list.id);
-                const busy = useListMutation.isPending && useListMutation.variables === list.id;
-                return <div key={list.id} className={`flex items-center gap-3 rounded-lg border p-4 ${active ? "border-blue-300 bg-blue-50/50" : "border-slate-200"}`}>
-                  <div className="flex size-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><FileSpreadsheet size={15} /></div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{list.filename}</p><p className="mt-1 text-xs text-slate-500">{list.row_count} contacts · {list.columns.slice(0, 5).join(" · ")}{list.columns.length > 5 ? " …" : ""}</p></div>
-                  <Button type="button" size="sm" variant={active ? "outline" : "default"} disabled={busy || active} onClick={() => useListMutation.mutate(list.id)} className="gap-1">{active ? <><Check size={13} /> Added</> : busy ? "Adding…" : "Add list"}</Button>
-                </div>;
-              }) : <div className="py-10 text-center"><p className="text-sm font-medium text-slate-700">No imported lists yet</p><p className="mt-1 text-xs text-slate-500">Upload a list and refresh.</p></div>}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={props.onOpenUpload} className="gap-1"><Upload size={13} /> Add CSV</Button>
+              <Button variant="outline" size="sm" onClick={() => props.setListPickerOpen(true)} className="gap-1"><Plus size={13} /> Add saved list</Button>
             </div>
-            <div className="flex justify-end border-t border-slate-200 px-5 py-3"><Button type="button" variant="outline" onClick={() => setListPickerOpen(false)}>Done</Button></div>
+          </div>
+          {props.selectedLists.length > 0 && (
+            <div className="flex flex-wrap gap-2 border-b border-slate-100 px-5 py-3">
+              {props.selectedLists.map((sourceId) => {
+                const list = props.lists.find((item) => item.id === sourceId);
+                return (
+                  <span key={sourceId} className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
+                    <Check size={11} /> {list?.filename || "Imported list"}
+                    <button type="button" onClick={() => props.onRemoveList(sourceId)} className="ml-1 rounded-full p-0.5 hover:bg-violet-100"><X size={11} /></button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <div className="max-h-[520px] divide-y divide-slate-100 overflow-auto">
+            {props.recipients.filter((recipient) => props.selectedRecipients.includes(recipient.id)).map((recipient) => (
+              <label key={recipient.id} className="flex cursor-pointer items-center gap-3 px-5 py-3 hover:bg-slate-50">
+                <input type="checkbox" checked onChange={() => props.onToggle(recipient.id)} className="size-4 accent-violet-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-slate-800">{recipient.name}</p>
+                  <p className="truncate text-[11px] text-slate-500">{recipient.email}{recipient.company ? ` · ${recipient.company}` : ""}</p>
+                </div>
+                <span className="text-[10px] text-slate-400">Selected</span>
+              </label>
+            ))}
           </div>
         </div>
       )}
+      {props.selectedRecipients.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="text-sm font-semibold">Select from existing contacts</h2>
+          <div className="mt-3 max-h-48 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
+            {props.recipients.filter((r) => !props.selectedRecipients.includes(r.id)).map((recipient) => (
+              <label key={recipient.id} className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                <input type="checkbox" checked={false} onChange={() => props.onToggle(recipient.id)} className="size-4 accent-violet-600" />
+                <div><p className="text-xs font-medium">{recipient.name}</p><p className="text-[11px] text-slate-500">{recipient.email}</p></div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SequenceStep(props: {
+  steps: Step[];
+  recipients: Recipient[];
+  previewRecipient: string;
+  setPreviewRecipient: (value: string) => void;
+  selectedPreview?: Recipient;
+  onUpdate: (index: number, patch: Partial<Step>) => void;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+  onVariable: (index: number, variable: string, field: "subject" | "body") => void;
+}) {
+  const first = props.steps[0];
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h1 className="text-lg font-bold">Sequence</h1><p className="mt-1 text-xs text-slate-500">Create and manage email sequences for this campaign.</p></div>
+        <Button variant="outline" onClick={props.onAdd} className="gap-2"><Plus size={14} /> Add Step</Button>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[250px_1fr]">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="flex items-center justify-between px-2 py-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Steps</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold">{props.steps.length} {props.steps.length === 1 ? "step" : "steps"}</span></div>
+          <div className="mt-2 space-y-2">
+            {props.steps.map((step, index) => (
+              <div key={index} className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+                <div className="flex items-center gap-2"><span className="flex size-6 items-center justify-center rounded bg-violet-100 text-[10px] font-bold text-violet-700">{index + 1}</span><div className="min-w-0"><p className="truncate text-xs font-semibold">{step.label}</p><p className="truncate text-[10px] text-slate-500">{step.subject || "No subject yet"}</p></div></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+            <div><span className="text-[10px] text-slate-400">Inbox Preview</span><span className="mx-2 text-[10px] text-slate-300">|</span><span className="text-[11px] font-semibold text-slate-700">Rohly</span><span className="ml-2 text-[10px] text-slate-400">You can edit your email below</span></div>
+            <select value={props.previewRecipient} onChange={(e) => props.setPreviewRecipient(e.target.value)} className="h-8 rounded-md border border-slate-200 px-2 text-xs"><option value="">Preview sample lead</option>{props.recipients.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+          </div>
+          <div className="space-y-4 p-5">
+            {props.steps.map((step, index) => (
+              <div key={index} className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">{index + 1}</span><div><p className="text-sm font-semibold">{step.label}</p>{index > 0 && <p className="text-[10px] text-slate-400">Delay after previous email</p>}</div></div>
+                  {index > 0 && <Button variant="ghost" size="icon" onClick={() => props.onRemove(index)}><Trash2 size={15} /></Button>}
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-[220px_1fr]">
+                  <Input value={step.template_name} onChange={(e) => props.onUpdate(index, { template_name: e.target.value })} placeholder="Template name" />
+                  {index > 0 && <label className="text-xs font-semibold">Delay (days)<Input type="number" min={1} value={step.delay_days} onChange={(e) => props.onUpdate(index, { delay_days: Number(e.target.value) })} className="mt-1" /></label>}
+                </div>
+                <Input value={step.subject} onChange={(e) => props.onUpdate(index, { subject: e.target.value })} placeholder="Enter a subject..." className="mt-3" />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {VARIABLES.map((variable) => <button type="button" key={variable} onClick={() => props.onVariable(index, variable, "body")} className="rounded border border-slate-200 px-2 py-1 text-[10px] text-slate-500 hover:border-violet-300 hover:text-violet-600">{variable}</button>)}
+                </div>
+                <textarea value={step.body} onChange={(e) => props.onUpdate(index, { body: e.target.value })} placeholder="Start writing your email..." rows={10} className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm leading-6 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" />
+                <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-400"><Braces size={12} /> Variables are replaced automatically before sending. Signature is added automatically.</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmailAccountsStep(props: {
+  inboxes: Inbox[];
+  selectedInboxes: string[];
+  onToggle: (id: string) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div><h1 className="text-lg font-bold">Email Accounts</h1><p className="mt-1 text-xs text-slate-500">Select the Gmail accounts that will send this campaign.</p></div>
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
+        <Mail className="mx-auto size-12 rounded-xl bg-violet-50 p-3 text-violet-600" />
+        <h2 className="mt-4 text-base font-semibold">Select Email Accounts for Your Campaign</h2>
+        <p className="mx-auto mt-2 max-w-xl text-xs leading-5 text-slate-500">Emails are distributed across your selected inboxes according to their available sending capacity.</p>
+        <div className="mt-7 grid gap-3 md:grid-cols-3">
+          {[
+            ["Smart Filtering", "Filter by connection and account status."],
+            ["Real-time Capacity", "See each account's daily sending limit."],
+            ["Health Insights", "Review account status before launch."],
+          ].map(([title, text]) => <div key={title} className="rounded-lg border border-slate-200 p-4 text-left"><Check size={16} className="text-emerald-600" /><p className="mt-3 text-xs font-semibold">{title}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">{text}</p></div>)}
+        </div>
+        <Button variant="outline" onClick={props.onRefresh} className="mt-6 gap-2"><RefreshCw size={13} /> Refresh accounts</Button>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-5 py-4"><h2 className="text-sm font-semibold">{props.selectedInboxes.length} accounts selected</h2></div>
+        {props.inboxes.map((inbox) => (
+          <label key={inbox.id} className="flex cursor-pointer items-center gap-4 border-b border-slate-100 px-5 py-4 last:border-0 hover:bg-slate-50">
+            <input type="checkbox" checked={props.selectedInboxes.includes(inbox.id)} onChange={() => props.onToggle(inbox.id)} className="size-4 accent-violet-600" />
+            <div className="flex-1"><p className="text-xs font-semibold">{inbox.display_name}</p><p className="mt-0.5 text-[11px] text-slate-500">{inbox.email}</p></div>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">{inbox.daily_sending_limit}/day</span>
+          </label>
+        ))}
+        {!props.inboxes.length && <div className="p-8 text-center text-xs text-slate-500">No connected Gmail accounts. Connect an inbox first.</div>}
+      </div>
+    </div>
+  );
+}
+
+function SubSequencesStep() {
+  return (
+    <div className="space-y-5">
+      <div><h1 className="text-lg font-bold">SubSequences</h1><p className="mt-1 text-xs text-slate-500">Create optional reply-based branches for contacts who respond to your campaign.</p></div>
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-16 text-center">
+        <Braces className="mx-auto size-12 rounded-xl bg-violet-50 p-3 text-violet-600" />
+        <h2 className="mt-5 text-sm font-semibold">No subsequences configured</h2>
+        <p className="mx-auto mt-2 max-w-xl text-xs leading-5 text-slate-500">This section is optional. You can add reply-based paths such as Interested, Busy / Reach out later, Pricing, Not interested, or Wrong contact in a later campaign update.</p>
+        <Button variant="outline" className="mt-5 gap-2" disabled><Plus size={14} /> Add SubSequence</Button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsStep(props: {
+  timezone: string;
+  setTimezone: (v: string) => void;
+  minGapMinutes: number;
+  setMinGapMinutes: (v: number) => void;
+  maxGapMinutes: number;
+  setMaxGapMinutes: (v: number) => void;
+  sendingWindowStart: string;
+  setSendingWindowStart: (v: string) => void;
+  sendingWindowEnd: string;
+  setSendingWindowEnd: (v: string) => void;
+  sendingDays: number[];
+  setSendingDays: Dispatch<SetStateAction<number[]>>;
+  stopOnReply: boolean;
+  setStopOnReply: (v: boolean) => void;
+  distributionMode: "pattern" | "random";
+  setDistributionMode: (v: "pattern" | "random") => void;
+  followUpPriority: number;
+  setFollowUpPriority: (v: number) => void;
+  testEmail: string;
+  setTestEmail: (v: string) => void;
+  testPassed: boolean;
+  testPending: boolean;
+  onTest: () => void;
+  selectedInboxes: string[];
+  selectedPreview?: Recipient;
+  firstStep?: Step;
+}) {
+  return (
+    <div className="space-y-5">
+      <div><h1 className="text-lg font-bold">Settings</h1><p className="mt-1 text-xs text-slate-500">Configure schedule, campaign behavior, and the required test run.</p></div>
+
+      <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
+        <div className="space-y-1">
+          {[
+            [Settings2, "Schedule Configuration"],
+            [Mail, "Campaign Behavior"],
+            [Braces, "Delivery Optimization"],
+            [Rocket, "AI & Automation"],
+            [Check, "Protection & Limits"],
+          ].map(([Icon, label], index) => <div key={label as string} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-xs font-semibold ${index === 0 ? "bg-violet-50 text-violet-600" : "text-slate-500"}`}><Icon size={14} />{label as string}</div>)}
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-2"><CalendarClock size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Send Schedule</h2></div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="text-xs font-semibold">Timezone<select value={props.timezone} onChange={(e) => props.setTimezone(e.target.value)} className="mt-2 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs"><option>Asia/Kolkata</option><option>America/Toronto</option><option>America/New_York</option><option>Europe/London</option><option>UTC</option></select></label>
+              <div><p className="text-xs font-semibold">Active Days</p><div className="mt-2 flex flex-wrap gap-1.5">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day, index) => <button type="button" key={day} onClick={() => props.setSendingDays((current) => current.includes(index) ? current.filter((v) => v !== index) : [...current, index])} className={`rounded-md border px-2.5 py-2 text-[10px] font-semibold ${props.sendingDays.includes(index) ? "border-violet-500 bg-violet-50 text-violet-600" : "border-slate-200 text-slate-500"}`}>{day}</button>)}</div></div>
+            </div>
+            <div className="mt-5 rounded-lg border border-slate-200 p-4">
+              <p className="text-xs font-semibold">Sending Window</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <label className="text-[11px] font-semibold">From<Input type="time" value={props.sendingWindowStart} onChange={(e) => props.setSendingWindowStart(e.target.value)} className="mt-1" /></label>
+                <label className="text-[11px] font-semibold">To<Input type="time" value={props.sendingWindowEnd} onChange={(e) => props.setSendingWindowEnd(e.target.value)} className="mt-1" /></label>
+                <label className="text-[11px] font-semibold">Random gap (minutes)<div className="mt-1 grid grid-cols-2 gap-2"><Input type="number" min={1} value={props.minGapMinutes} onChange={(e) => props.setMinGapMinutes(Number(e.target.value))} /><Input type="number" min={1} value={props.maxGapMinutes} onChange={(e) => props.setMaxGapMinutes(Number(e.target.value))} /></div></label>
+              </div>
+              <p className="mt-3 text-[10px] italic text-slate-400">Rohly applies a random delay between the minimum and maximum gap.</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h2 className="text-sm font-semibold">Campaign Behavior</h2>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <button type="button" onClick={() => props.setStopOnReply(true)} className={`rounded-lg border p-4 text-left ${props.stopOnReply ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Stop on replies</p><p className="mt-1 text-[10px] text-slate-500">Recommended for engagement.</p></button>
+              <button type="button" onClick={() => props.setStopOnReply(false)} className={`rounded-lg border p-4 text-left ${!props.stopOnReply ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Continue follow-ups</p><p className="mt-1 text-[10px] text-slate-500">Keep the sequence running.</p></button>
+              <div className="rounded-lg border border-slate-200 p-4"><p className="text-xs font-semibold">Follow-up Priority</p><input type="range" min={0} max={100} value={props.followUpPriority} onChange={(e) => props.setFollowUpPriority(Number(e.target.value))} className="mt-4 w-full accent-violet-600" /><div className="mt-2 flex justify-between text-[10px] text-slate-400"><span>New Leads</span><span>{props.followUpPriority}% Follow-ups</span></div></div>
+            </div>
+            <div className="mt-4"><p className="text-xs font-semibold">Email Distribution</p><div className="mt-2 grid gap-3 md:grid-cols-2"><button type="button" onClick={() => props.setDistributionMode("pattern")} className={`rounded-lg border p-4 text-left ${props.distributionMode === "pattern" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Pattern-based</p><p className="mt-1 text-[10px] text-slate-500">Even distribution across selected inboxes.</p></button><button type="button" onClick={() => props.setDistributionMode("random")} className={`rounded-lg border p-4 text-left ${props.distributionMode === "random" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Randomized</p><p className="mt-1 text-[10px] text-slate-500">Random inbox selection for each send.</p></button></div></div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-2"><FlaskConical size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Test before launch</h2>{props.testPassed && <span className="ml-auto rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700"><Check size={11} className="mr-1 inline" /> Test passed</span>}</div>
+            <p className="mt-1 text-[11px] text-slate-500">Send the first email to yourself before the campaign can become active.</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input value={props.testEmail} onChange={(e) => props.setTestEmail(e.target.value)} placeholder="your@email.com" type="email" /><Button onClick={props.onTest} disabled={props.testPending || !props.selectedInboxes.length} className="gap-2 bg-violet-600 hover:bg-violet-700"><Mail size={14} />{props.testPending ? "Sending…" : "Send test email"}</Button></div>
+            {!props.selectedInboxes.length && <p className="mt-2 text-[10px] text-amber-600">Select an email account before running the test.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListPicker(props: {
+  lists: RecipientList[];
+  selectedLists: string[];
+  pending: boolean;
+  onRefresh: () => void;
+  onUpload: () => void;
+  onClose: () => void;
+  onUse: (id: string) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-semibold">Import from Saved Lists</h2><p className="mt-1 text-xs text-slate-500">Only new contacts are added; duplicates are skipped automatically.</p></div><Button variant="ghost" size="icon" onClick={props.onClose}><X size={17} /></Button></div>
+        <div className="flex gap-2 border-b border-slate-100 px-5 py-3"><Button variant="outline" size="sm" onClick={props.onRefresh} className="gap-1"><RefreshCw size={13} /> Refresh</Button><Button size="sm" onClick={props.onUpload} className="gap-1 bg-violet-600"><Upload size={13} /> Upload CSV</Button></div>
+        <div className="max-h-[60vh] overflow-auto p-5">{props.lists.length ? props.lists.map((list) => { const active = props.selectedLists.includes(list.id); return <div key={list.id} className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 p-4"><FileSpreadsheet size={17} className="text-violet-600" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{list.filename}</p><p className="mt-1 text-[10px] text-slate-500">{list.row_count} contacts</p></div><Button size="sm" variant={active ? "outline" : "default"} disabled={active || props.pending} onClick={() => props.onUse(list.id)}>{active ? "Added" : props.pending ? "Adding…" : "Add list"}</Button></div>; }) : <div className="py-10 text-center text-xs text-slate-500">No saved lists found. Upload a CSV first.</div>}</div>
+        <div className="flex justify-end border-t border-slate-200 px-5 py-3"><Button variant="outline" onClick={props.onClose}>Done</Button></div>
+      </div>
     </div>
   );
 }
