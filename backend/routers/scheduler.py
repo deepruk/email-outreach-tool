@@ -16,11 +16,11 @@ from googleapiclient.discovery import build
 
 from lib.db import db
 from routers.auth import require_user
+from models.auth import UserPublic
 from models.scheduler import (
     Activity,
     Campaign,
     CampaignCreate,
-    UserPublic,
     HistoryEntry,
     Inbox,
     InboxConnectRequest,
@@ -433,11 +433,11 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
     }
     if first_send:
         updates["sent_count"] = 1
-        recipient = await db.recipients.find_one({"id": campaign.recipient_ids[0]})
-        inbox = await db.inboxes.find_one({"id": campaign.inbox_id})
+        recipient = await db.recipients.find_one({"id": campaign.recipient_ids[0], "user_id": user.id})
+        inbox = await db.inboxes.find_one({"id": campaign.inbox_id, "user_id": user.id})
         if recipient and inbox:
             if not inbox.get("is_mocked", True):
-                template = await db.templates.find_one({"id": campaign.template_id})
+                template = await db.templates.find_one({"id": campaign.template_id, "user_id": user.id})
                 if template:
                     try:
                         await send_gmail_message(
