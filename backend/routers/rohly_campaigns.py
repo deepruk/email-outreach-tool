@@ -289,7 +289,13 @@ async def launch_campaign(campaign_id: str) -> dict:
             raise HTTPException(status_code=500, detail=f"Could not save campaign schedule: {str(exc)[:240]}") from exc
     now = datetime.now(timezone.utc)
     first_at = min(event["scheduled_at"] for event in events) if events else now
-    await db.campaigns.update_one({"id": campaign_id}, {"$set": {"status": "active", "launched_at": now, "next_send_at": first_at, "emails_scheduled": len(events)}})
+    try:
+        await db.campaigns.update_one(
+            {"id": campaign_id},
+            {"$set": {"status": "active", "launched_at": now, "next_send_at": first_at, "emails_scheduled": len(events)}},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not activate campaign: {str(exc)[:400]}") from exc
     return {**campaign, "status": "active", "launched_at": now, "next_send_at": first_at, "emails_scheduled": len(events)}
 
 
