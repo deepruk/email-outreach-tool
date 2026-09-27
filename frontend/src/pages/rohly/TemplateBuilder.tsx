@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Braces, Check, Clock3, FileSpreadsheet, Plus, RefreshCw, Rocket, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Braces, Check, Clock3, FileSpreadsheet, Mail, Plus, RefreshCw, Rocket, Trash2, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import type { Inbox, Recipient, Template } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,8 @@ export default function TemplateBuilder() {
   const [sendingWindowEnd, setSendingWindowEnd] = useState("18:00");
   const [sendingDays, setSendingDays] = useState<number[]>([0, 1, 2, 3, 4]);
   const [previewRecipient, setPreviewRecipient] = useState("");
+  const [testEmail, setTestEmail] = useState("");
+  const [testPassed, setTestPassed] = useState(false);
 
   const recipientsQuery = useQuery({
     queryKey: ["rohly-campaign-recipients"],
@@ -107,6 +109,28 @@ export default function TemplateBuilder() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add this list"),
   });
 
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      if (!testEmail.trim()) throw new Error("Enter the email address where you want to receive the test");
+      if (!selectedInboxes.length) throw new Error("Select a sending inbox first");
+      const first = steps[0];
+      return apiPost<{ success: boolean; recipient_email: string; inbox_email: string; mode: string }>("/workspace/rohly-campaigns/test-run", {
+        inbox_id: selectedInboxes[0],
+        recipient_email: testEmail.trim(),
+        subject: previewValue(first.subject.trim(), selectedPreview).trim(),
+        body: previewValue(first.body, selectedPreview).trim(),
+      });
+    },
+    onSuccess: (result) => {
+      setTestPassed(true);
+      toast.success(`Test email sent to ${result.recipient_email} via ${result.inbox_email}`);
+    },
+    onError: (error) => {
+      setTestPassed(false);
+      toast.error(error instanceof Error ? error.message : "Test email failed");
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const templateIds: string[] = [];
@@ -146,8 +170,10 @@ export default function TemplateBuilder() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not launch campaign"),
   });
 
-  const toggle = (setter: Dispatch<SetStateAction<string[]>>, id: string) =>
+  const toggle = (setter: Dispatch<SetStateAction<string[]>>, id: string) => {
+    setTestPassed(false);
     setter((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  };
 
   const removeRecipientList = (sourceId: string) => {
     const idsToRemove = new Set(listRecipientMap[sourceId] ?? []);
@@ -161,8 +187,10 @@ export default function TemplateBuilder() {
     toast.success("Recipient list removed from this campaign");
   };
 
-  const updateStep = (index: number, patch: Partial<Step>) =>
+  const updateStep = (index: number, patch: Partial<Step>) => {
+    setTestPassed(false);
     setSteps((current) => current.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step));
+  };
 
   const addFollowUp = () => setSteps((current) => [...current, emptyStep(current.length)]);
 
@@ -171,6 +199,7 @@ export default function TemplateBuilder() {
 
   const insertVariable = (index: number, variable: string, field: "subject" | "body") => {
     const step = steps[index];
+    setTestPassed(false);
     updateStep(index, { [field]: step[field] + variable });
   };
 
@@ -185,6 +214,7 @@ export default function TemplateBuilder() {
     if (minGapMinutes < 1 || maxGapMinutes < minGapMinutes) return toast.error("Enter a valid minimum/maximum email gap");
     if (sendingWindowStart >= sendingWindowEnd) return toast.error("Working-hours start must be before the end time");
     if (!sendingDays.length) return toast.error("Select at least one working day");
+    if (!testPassed) return toast.error("Run a successful test email before launching the campaign");
     createMutation.mutate();
   };
 
@@ -381,8 +411,33 @@ export default function TemplateBuilder() {
             <div className="mt-5 rounded-md bg-blue-50 p-3 text-xs leading-5 text-blue-800">
               <strong>Personalization:</strong> Use the variable buttons in each email. Rohly fills the values for every lead before sending.
             </div>
-            <Button onClick={validateAndLaunch} disabled={createMutation.isPending} className="mt-5 w-full gap-2 bg-blue-700 hover:bg-blue-800">
-              <Rocket size={15} /> {createMutation.isPending ? "Creating campaign…" : "Launch campaign"} <ArrowRight size={14} />
+            <div className="mt-5 rounded-lg border border-slate-200 p-4">
+              <div className="flex items-center gap-2">
+                <Mail size={15} />
+                <h3 className="text-sm font-semibold">Test before launch</h3>
+                {testPassed && <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700"><Check size={11} /> Test passed</span>}
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">Send the first email to yourself first. The campaign will stay inactive until the test succeeds.</p>
+              <Input
+                value={testEmail}
+                onChange={(event) => { setTestEmail(event.target.value); setTestPassed(false); }}
+                placeholder="your@email.com"
+                type="email"
+                className="mt-3 h-10"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => testMutation.mutate()}
+                disabled={testMutation.isPending || createMutation.isPending}
+                className="mt-2 w-full gap-2"
+              >
+                <Mail size={14} /> {testMutation.isPending ? "Sending test…" : "Send test email"}
+              </Button>
+            </div>
+
+            <Button onClick={validateAndLaunch} disabled={createMutation.isPending || !testPassed} className="mt-3 w-full gap-2 bg-blue-700 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">
+              <Rocket size={15} /> {createMutation.isPending ? "Creating campaign…" : testPassed ? "Launch campaign" : "Test email required"} <ArrowRight size={14} />
             </Button>
           </Surface>
         </div>
