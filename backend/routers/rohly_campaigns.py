@@ -165,6 +165,80 @@ async def inboxes() -> list[dict]:
     return await db.inboxes.find({"status": "connected"}).sort("email", 1).to_list(1000)
 
 
+class DraftCreate(BaseModel):
+    id: str | None = None
+    name: str = "Rohly outreach campaign"
+    active_step: int = 0
+    selected_recipients: list[str] = []
+    selected_inboxes: list[str] = []
+    selected_lists: list[str] = []
+    list_recipient_map: dict[str, list[str]] = {}
+    steps: list[dict] = []
+    timezone: str = "Asia/Kolkata"
+    min_gap_minutes: int = 10
+    max_gap_minutes: int = 20
+    sending_window_start: str = "09:00"
+    sending_window_end: str = "18:00"
+    sending_days: list[int] = [0, 1, 2, 3, 4]
+    stop_on_reply: bool = True
+    follow_up_priority: int = 100
+    distribution_mode: str = "pattern"
+
+
+@router.get("/drafts")
+async def list_drafts() -> list[dict]:
+    return await db.rohly_drafts.find().sort("updated_at", -1).to_list(1000)
+
+
+@router.get("/drafts/{draft_id}")
+async def get_draft(draft_id: str) -> dict:
+    draft = await db.rohly_drafts.find_one({"id": draft_id})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    draft.pop("_id", None)
+    return draft
+
+
+@router.post("/drafts")
+async def save_draft(input: DraftCreate) -> dict:
+    draft_id = input.id or uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    draft = {
+        "id": draft_id,
+        "name": input.name.strip() or "Rohly outreach campaign",
+        "active_step": input.active_step,
+        "selected_recipients": list(dict.fromkeys(input.selected_recipients)),
+        "selected_inboxes": list(dict.fromkeys(input.selected_inboxes)),
+        "selected_lists": list(dict.fromkeys(input.selected_lists)),
+        "list_recipient_map": input.list_recipient_map,
+        "steps": input.steps,
+        "timezone": input.timezone,
+        "min_gap_minutes": input.min_gap_minutes,
+        "max_gap_minutes": input.max_gap_minutes,
+        "sending_window_start": input.sending_window_start,
+        "sending_window_end": input.sending_window_end,
+        "sending_days": input.sending_days,
+        "stop_on_reply": input.stop_on_reply,
+        "follow_up_priority": input.follow_up_priority,
+        "distribution_mode": input.distribution_mode,
+        "updated_at": now,
+        "created_at": now,
+    }
+    await db.rohly_drafts.update_one(
+        {"id": draft_id},
+        {"$set": {k: v for k, v in draft.items() if k != "created_at"}, "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    draft.pop("_id", None)
+    return draft
+
+
+@router.delete("/drafts/{draft_id}", status_code=204)
+async def delete_draft(draft_id: str):
+    await db.rohly_drafts.delete_one({"id": draft_id})
+    return None
+
+
 @router.post("/test-run")
 async def test_run(input: TestRunRequest) -> dict:
     recipient_email = input.recipient_email.strip()
