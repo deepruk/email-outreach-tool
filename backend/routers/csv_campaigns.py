@@ -29,6 +29,7 @@ from models.csv_campaign import (
 from models.scheduler import Inbox
 from routers.scheduler import send_gmail_message
 from routers.auth import require_user
+from models.auth import UserPublic
 
 router = APIRouter(prefix="/csv", tags=["csv-campaigns"], dependencies=[Depends(require_user)])
 
@@ -126,7 +127,7 @@ def preview_from_source(source: CsvSource, input: CsvCampaignCreate, limit: int 
 
 
 async def build_edit_schedule(campaign_id: str, input: CsvCampaignCreate) -> tuple[list[ScheduledEmail], int]:
-    source_row = await db.csv_sources.find_one({"id": input.source_id})
+    source_row = await db.csv_sources.find_one({"id": input.source_id, "user_id": user.id})
     if not source_row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     source = CsvSource(**source_row)
@@ -279,7 +280,7 @@ async def calculate_edit_impact(campaign_id: str, proposed: list[ScheduledEmail]
 
 
 @router.post("/sources", response_model=CsvSource)
-async def upload_csv(file: UploadFile = File(...)) -> CsvSource:
+async def upload_csv(file: UploadFile = File(...), user: UserPublic = Depends(require_user)) -> CsvSource:
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=422, detail="Upload a CSV file")
     raw = await file.read()
@@ -297,19 +298,19 @@ async def upload_csv(file: UploadFile = File(...)) -> CsvSource:
     if not rows:
         raise HTTPException(status_code=422, detail="CSV needs at least one lead row")
     source = CsvSource(filename=file.filename, columns=columns, row_count=len(rows), rows=rows)
-    await db.csv_sources.insert_one(source.model_dump())
+    await db.csv_sources.insert_one({**source.model_dump(), "user_id": user.id})
     return source
 
 
 @router.get("/sources", response_model=list[CsvSourceSummary])
-async def list_sources() -> list[CsvSourceSummary]:
-    rows = await db.csv_sources.find({}, {"rows": 0}).sort("uploaded_at", -1).to_list(100)
+async def list_sources(user: UserPublic = Depends(require_user)) -> list[CsvSourceSummary]:
+    rows = await db.csv_sources.find({"user_id": user.id}, {"rows": 0}).sort("uploaded_at", -1).to_list(100)
     return [CsvSourceSummary(**row) for row in rows]
 
 
 @router.get("/sources/{source_id}", response_model=CsvSource)
-async def get_source(source_id: str) -> CsvSource:
-    row = await db.csv_sources.find_one({"id": source_id})
+async def get_source(source_id: str, user: UserPublic = Depends(require_user)) -> CsvSource:
+    row = await db.csv_sources.find_one({"id": source_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     return CsvSource(**row)
@@ -330,8 +331,8 @@ async def delete_source(source_id: str):
 
 
 @router.post("/sources/{source_id}/derive", response_model=CsvSource)
-async def derive_source(source_id: str, input: CsvSourceDeriveRequest) -> CsvSource:
-    row = await db.csv_sources.find_one({"id": source_id})
+async def derive_source(source_id: str, input: CsvSourceDeriveRequest, user: UserPublic = Depends(require_user)) -> CsvSource:
+    row = await db.csv_sources.find_one({"id": source_id, "user_id": user.id})
     if not row:
         raise HTTPException(status_code=404, detail="CSV source not found")
     original = CsvSource(**row)
@@ -355,7 +356,7 @@ async def preview_campaign(input: CsvCampaignCreate) -> CsvCampaignPreview:
 
 
 @router.post("/campaigns", response_model=CsvCampaign)
-async def create_campaign(input: CsvCampaignCreate) -> CsvCampaign:
+async def create_campaign(input: CsvCampaignCreate, user: UserPublic = Depends(require_user)) -> CsvCampaign:
     source_row = await db.csv_sources.find_one({"id": input.source_id})
     if not source_row:
         raise HTTPException(status_code=404, detail="CSV source not found")
@@ -363,7 +364,7 @@ async def create_campaign(input: CsvCampaignCreate) -> CsvCampaign:
     preview = preview_from_source(source, input)
     if preview.valid_count == 0:
         raise HTTPException(status_code=422, detail="No complete leads are available to schedule")
-    inbox_count = await db.inboxes.count_documents({"id": {"$in": input.inbox_ids}, "status": "connected"})
+    inbox_count = await db.inboxes.count_documents({"id": {"$in": input.inbox_ids}, "status": "connected", "user_id": user.id})
     if inbox_count != len(set(input.inbox_ids)):
         raise HTTPException(status_code=422, detail="Select connected inboxes only")
     try:
@@ -376,13 +377,13 @@ async def create_campaign(input: CsvCampaignCreate) -> CsvCampaign:
         total_leads=source.row_count,
         skipped_leads=preview.skipped_count,
     )
-    await db.csv_campaigns.insert_one(campaign.model_dump())
+    await db.csv_campaigns.insert_one({**campaign.model_dump(), "user_id": user.id})
     return campaign
 
 
 @router.get("/campaigns", response_model=list[CsvCampaign])
-async def list_campaigns() -> list[CsvCampaign]:
-    rows = await db.csv_campaigns.find().sort("created_at", -1).to_list(500)
+async def list_campaigns(user: UserPublic = Depends(require_user)) -> list[CsvCampaign]:
+    rows = await db.csv_campaigns.find({"user_id": user.id}).sort("created_at", -1).to_list(500)
     return [CsvCampaign(**row) for row in rows]
 
 
