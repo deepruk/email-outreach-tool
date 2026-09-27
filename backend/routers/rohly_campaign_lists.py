@@ -129,14 +129,17 @@ async def use_recipient_list(source_id: str) -> dict:
         recipient_ids.append(recipient_id)
 
     if not recipient_ids:
-        if duplicate_count > 0:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"This list contains {duplicate_count} email address(es), but all of them are already "
-                    "in Rohly or have been used in a campaign. No new contacts were added."
-                ),
-            )
+        if duplicate_count > 0 and source_email_count > 0:
+            return {
+                "source_id": source_id,
+                "filename": row["filename"],
+                "recipient_ids": [],
+                "count": 0,
+                "duplicate_count": duplicate_count,
+                "skipped_duplicates": duplicate_count,
+                "source_email_count": source_email_count,
+                "invalid_count": invalid_count,
+            }
         available = ", ".join(columns[:12]) or "none"
         raise HTTPException(
             status_code=422,
