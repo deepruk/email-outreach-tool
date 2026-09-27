@@ -55,6 +55,7 @@ const stepLabels = ["Lead List", "Sequence", "Email Accounts", "SubSequences", "
 
 export default function TemplateBuilder() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [activeStep, setActiveStep] = useState(0);
   const [name, setName] = useState("Rohly outreach campaign");
