@@ -7,7 +7,6 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from email_validator import validate_email, EmailNotValidError
 
 from lib.db import db
 from routers.auth import require_user
@@ -160,11 +159,9 @@ async def inboxes() -> list[dict]:
 
 @router.post("/test-run")
 async def test_run(input: TestRunRequest) -> dict:
-    try:
-        validated = validate_email(input.recipient_email.strip(), check_deliverability=False)
-        recipient_email = validated.normalized
-    except EmailNotValidError as exc:
-        raise HTTPException(status_code=422, detail="Enter a valid test recipient email") from exc
+    recipient_email = input.recipient_email.strip()
+    if "@" not in recipient_email or recipient_email.startswith("@") or recipient_email.endswith("@"):
+        raise HTTPException(status_code=422, detail="Enter a valid test recipient email")
 
     inbox = await db.inboxes.find_one({"id": input.inbox_id, "status": "connected"})
     if not inbox:
