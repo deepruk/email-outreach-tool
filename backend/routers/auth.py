@@ -115,6 +115,8 @@ async def require_user(rohly_session: str | None = Cookie(default=None)) -> User
     user = await db.users.find_one({"id": session["user_id"]})
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found")
+    if not user.get("email_verified", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Please verify your email before signing in")
     return UserPublic(**user)
 
 
