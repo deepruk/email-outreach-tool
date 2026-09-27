@@ -7,6 +7,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from email_validator import validate_email, EmailNotValidError
 
 from lib.db import db
 from routers.auth import require_user
@@ -19,6 +20,13 @@ class Step(BaseModel):
     template_id: str
     label: str = "Initial email"
     delay_days: int = Field(default=0, ge=0, le=365)
+
+
+class TestRunRequest(BaseModel):
+    inbox_id: str
+    recipient_email: str
+    subject: str
+    body: str
 
 
 class CampaignCreate(BaseModel):
@@ -150,6 +158,48 @@ async def inboxes() -> list[dict]:
     return await db.inboxes.find({"status": "connected"}).sort("email", 1).to_list(1000)
 
 
+@router.post("/test-run")
+async def test_run(input: TestRunRequest) -> dict:
+    try:
+        validated = validate_email(input.recipient_email.strip(), check_deliverability=False)
+        recipient_email = validated.normalized
+    except EmailNotValidError as exc:
+        raise HTTPException(status_code=422, detail="Enter a valid test recipient email") from exc
+
+    inbox = await db.inboxes.find_one({"id": input.inbox_id, "status": "connected"})
+    if not inbox:
+        raise HTTPException(status_code=404, detail="Connected sending inbox not found")
+
+    subject = input.subject.strip()
+    body = input.body.strip()
+    if not subject or not body:
+        raise HTTPException(status_code=422, detail="Subject and body are required for the test")
+
+    try:
+        if inbox.get("is_mocked", True):
+            result = {"message_id": None, "thread_id": None}
+            mode = "mocked"
+        else:
+            result = await send_gmail_message(input.inbox_id, recipient_email, subject, body)
+            mode = "gmail"
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Test email failed: {str(exc)[:240]}") from exc
+
+    await db.activities.insert_one({
+        "message": "Campaign test run completed",
+        "detail": f"Test sent to {recipient_email} via {inbox.get('email', '')}",
+        "tone": "success",
+        "time": datetime.now(timezone.utc),
+    })
+    return {
+        "success": True,
+        "mode": mode,
+        "recipient_email": recipient_email,
+        "inbox_email": inbox.get("email", ""),
+        "message_id": result.get("message_id"),
+    }
+
+
 @router.post("")
 async def create_campaign(input: CampaignCreate) -> dict:
     if input.min_gap_minutes > input.max_gap_minutes:
@@ -198,7 +248,10 @@ async def create_campaign(input: CampaignCreate) -> dict:
         "created_at": datetime.now(timezone.utc),
         "launched_at": None,
     }
-    await db.campaigns.insert_one(campaign)
+    try:
+        await db.campaigns.insert_one(campaign)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create campaign: {str(exc)[:240]}") from exc
     return campaign
 
 
@@ -210,10 +263,22 @@ async def launch_campaign(campaign_id: str) -> dict:
     if campaign.get("status") in {"active", "completed"}:
         raise HTTPException(status_code=409, detail="Campaign is already launched")
     recipients = await db.recipients.find({"id": {"$in": campaign["recipient_ids"]}}).to_list(5000)
-    events = _schedule_events(campaign["id"], campaign["name"], recipients, campaign["inbox_ids"], campaign["steps"], campaign.get("timezone", "Asia/Kolkata"), campaign["min_gap_minutes"], campaign["max_gap_minutes"], campaign.get("sending_window_start", "09:00"), campaign.get("sending_window_end", "18:00"), campaign.get("sending_days", [0, 1, 2, 3, 4]))
+    if len(recipients) != len(set(campaign["recipient_ids"])):
+        raise HTTPException(status_code=409, detail="One or more selected recipients no longer exist")
+
+    try:
+        events = _schedule_events(campaign["id"], campaign["name"], recipients, campaign["inbox_ids"], campaign["steps"], campaign.get("timezone", "Asia/Kolkata"), campaign["min_gap_minutes"], campaign["max_gap_minutes"], campaign.get("sending_window_start", "09:00"), campaign.get("sending_window_end", "18:00"), campaign.get("sending_days", [0, 1, 2, 3, 4]))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not schedule campaign: {str(exc)[:240]}") from exc
+
     await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "source_type": "rohly_template"})
     if events:
-        await db.scheduled_emails.insert_many(events)
+        try:
+            await db.scheduled_emails.insert_many(events)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not save campaign schedule: {str(exc)[:240]}") from exc
     now = datetime.now(timezone.utc)
     first_at = min(event["scheduled_at"] for event in events) if events else now
     await db.campaigns.update_one({"id": campaign_id}, {"$set": {"status": "active", "launched_at": now, "next_send_at": first_at, "emails_scheduled": len(events)}})
