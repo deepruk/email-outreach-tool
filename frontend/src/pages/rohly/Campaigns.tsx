@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowUpRight, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet } from "@/lib/api";
 import { Button } from "@/components/ui/button";
