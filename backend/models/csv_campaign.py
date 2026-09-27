@@ -93,6 +93,8 @@ class CsvCampaign(BaseModel):
     skipped_leads: int = 0
     replies: int = 0
     positive_replies: int = 0
+    unique_opens: int = 0
+    total_opens: int = 0
     status: Literal["draft", "scheduled", "running", "paused", "stopped", "completed"] = "draft"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     launched_at: datetime | None = None
@@ -134,6 +136,10 @@ class ScheduledEmail(BaseModel):
     message_id: str | None = None
     thread_id: str | None = None
     replied_at: datetime | None = None
+    tracking_id: str | None = None
+    open_count: int = 0
+    first_opened_at: datetime | None = None
+    last_opened_at: datetime | None = None
 
 
 class CsvCampaignLaunchResponse(BaseModel):
