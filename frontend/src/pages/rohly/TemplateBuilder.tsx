@@ -175,6 +175,9 @@ export default function TemplateBuilder() {
         sending_window_start: sendingWindowStart,
         sending_window_end: sendingWindowEnd,
         sending_days: sendingDays,
+        stop_on_reply: stopOnReply,
+        follow_up_priority: followUpPriority,
+        distribution_mode: distributionMode,
       });
       await apiPost(`/workspace/rohly-campaigns/${created.id}/launch`, {});
       return created;
