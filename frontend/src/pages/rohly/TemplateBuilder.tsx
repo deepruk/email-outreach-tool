@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
@@ -432,20 +432,63 @@ function LeadListStep(props: {
   onUseList: (id: string) => void;
   useListPending: boolean;
 }) {
+  const [tab, setTab] = useState<"all" | "active" | "replied" | "failed" | "scheduled" | "manual">("all");
+  const [query, setQuery] = useState("");
+
+  const leads = useMemo(() => {
+    const selected = props.recipients.filter((r) => props.selectedRecipients.includes(r.id));
+    const q = query.trim().toLowerCase();
+    return selected.filter((r) => {
+      const matchesQuery = !q || [r.name, r.email, r.company].some((v) => (v || "").toLowerCase().includes(q));
+      if (!matchesQuery) return false;
+      if (tab === "manual") return !props.selectedLists.length;
+      // Pre-launch leads are new/active. Runtime status is displayed once campaign activity exists.
+      if (tab === "all" || tab === "active") return true;
+      return false;
+    });
+  }, [props.recipients, props.selectedRecipients, props.selectedLists, query, tab]);
+
+  const counts = {
+    all: props.selectedRecipients.length,
+    active: props.selectedRecipients.length,
+    replied: 0,
+    failed: 0,
+    scheduled: 0,
+    manual: props.selectedLists.length ? 0 : props.selectedRecipients.length,
+  };
+
+  const tabItems = [
+    ["all", "All Leads", counts.all],
+    ["active", "Active", counts.active],
+    ["replied", "Replied", counts.replied],
+    ["failed", "Failed", counts.failed],
+    ["scheduled", "Scheduled", counts.scheduled],
+    ["manual", "Manual Followups", counts.manual],
+  ] as const;
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-lg font-bold text-slate-900">Leads</h1>
-        <p className="mt-1 text-xs text-slate-500">Add and manage leads for this campaign.</p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold text-slate-900">Lead List</h1>
+          <p className="mt-1 text-xs text-slate-500">Manage campaign leads, status, activity and sequence progress.</p>
+        </div>
+        <div className="flex gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700">
+            <Upload size={14} /> Upload New CSV
+            <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
+          </label>
+          <Button variant="outline" size="sm" onClick={() => props.setListPickerOpen(true)} className="gap-1"><Plus size={13} /> Saved List</Button>
+        </div>
       </div>
 
-      {!props.selectedRecipients.length ? (
+      {props.selectedRecipients.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white p-16 text-center">
           <Users className="mx-auto size-12 rounded-xl bg-violet-50 p-3 text-violet-600" />
           <h2 className="mt-5 text-sm font-semibold text-slate-800">No leads added yet</h2>
           <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-slate-500">Add leads to your campaign to start sending emails. You can upload a CSV or select from your existing saved lists.</p>
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700">
+          <div className="mt-5 flex justify-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm">
               <Upload size={14} /> Upload CSV
               <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
             </label>
@@ -453,64 +496,88 @@ function LeadListStep(props: {
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-            <div>
-              <h2 className="text-sm font-semibold">Leads</h2>
-              <p className="mt-1 text-[11px] text-slate-500">{props.selectedRecipients.length} leads selected</p>
-            </div>
-            <div className="flex gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                <Upload size={13} /> Add CSV
-                <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
-              </label>
-              <Button variant="outline" size="sm" onClick={() => props.setListPickerOpen(true)} className="gap-1"><Plus size={13} /> Add saved list</Button>
-            </div>
-          </div>
-          {props.selectedLists.length > 0 && (
-            <div className="flex flex-wrap gap-2 border-b border-slate-100 px-5 py-3">
-              {props.selectedLists.map((sourceId) => {
-                const list = props.lists.find((item) => item.id === sourceId);
-                return (
-                  <span key={sourceId} className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
-                    <Check size={11} /> {list?.filename || "Imported list"}
-                    <button type="button" onClick={() => props.onRemoveList(sourceId)} className="ml-1 rounded-full p-0.5 hover:bg-violet-100"><X size={11} /></button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <div className="max-h-[520px] divide-y divide-slate-100 overflow-auto">
-            {props.recipients.filter((recipient) => props.selectedRecipients.includes(recipient.id)).map((recipient) => (
-              <label key={recipient.id} className="flex cursor-pointer items-center gap-3 px-5 py-3 hover:bg-slate-50">
-                <input type="checkbox" checked onChange={() => props.onToggle(recipient.id)} className="size-4 accent-violet-600" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-slate-800">{recipient.name}</p>
-                  <p className="truncate text-[11px] text-slate-500">{recipient.email}{recipient.company ? ` · ${recipient.company}` : ""}</p>
+        <>
+          <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-full bg-red-100 text-red-600"><Users size={15} /></div>
+                <div>
+                  <p className="text-xs font-bold text-red-700">Delivery issues</p>
+                  <p className="text-[11px] text-red-600">Failed and paused leads will appear here after the campaign starts.</p>
                 </div>
-                <span className="text-[10px] text-slate-400">Selected</span>
-              </label>
-            ))}
+              </div>
+              <span className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-red-600">0 failed</span>
+            </div>
           </div>
-        </div>
-      )}
-      {props.selectedRecipients.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <h2 className="text-sm font-semibold">Select from existing contacts</h2>
-          <div className="mt-3 max-h-48 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
-            {props.recipients.filter((r) => !props.selectedRecipients.includes(r.id)).map((recipient) => (
-              <label key={recipient.id} className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
-                <input type="checkbox" checked={false} onChange={() => props.onToggle(recipient.id)} className="size-4 accent-violet-600" />
-                <div><p className="text-xs font-medium">{recipient.name}</p><p className="text-[11px] text-slate-500">{recipient.email}</p></div>
-              </label>
-            ))}
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 px-4 pt-3">
+              {tabItems.map(([key, label, count]) => (
+                <button key={key} type="button" onClick={() => setTab(key)}
+                  className={`rounded-t-md border-b-2 px-3 py-2 text-[11px] font-semibold ${tab === key ? "border-violet-600 text-violet-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}>
+                  {label} ({count})
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
+              <div className="relative w-full max-w-md">
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search leads by name, email, or company..." className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 pl-3 pr-3 text-xs outline-none focus:border-violet-400 focus:bg-white" />
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                <span>{leads.length} shown</span>
+                {props.selectedLists.length > 0 && <span className="rounded-full bg-violet-50 px-2 py-1 font-semibold text-violet-700">{props.selectedLists.length} list{props.selectedLists.length > 1 ? "s" : ""}</span>}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] text-left">
+                <thead className="bg-slate-50 text-[10px] font-semibold text-slate-500">
+                  <tr>
+                    <th className="w-10 px-4 py-3"><input type="checkbox" checked={leads.length > 0 && leads.every((r) => props.selectedRecipients.includes(r.id))} readOnly className="size-3.5 accent-violet-600" /></th>
+                    <th className="px-3 py-3">Lead Info</th>
+                    <th className="px-3 py-3">Last Message</th>
+                    <th className="px-3 py-3">Reply Details</th>
+                    <th className="px-3 py-3">Activity</th>
+                    <th className="px-3 py-3">Sequence Progress</th>
+                    <th className="px-3 py-3">Next Step</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3">Source</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {leads.map((recipient) => (
+                    <tr key={recipient.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-4 align-top"><input type="checkbox" checked onChange={() => props.onToggle(recipient.id)} className="size-3.5 accent-violet-600" /></td>
+                      <td className="px-3 py-4 align-top">
+                        <div className="flex items-start gap-2">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{(recipient.name || recipient.email).slice(0, 2).toUpperCase()}</span>
+                          <div className="min-w-0"><p className="max-w-[145px] truncate text-xs font-semibold text-slate-800">{recipient.name || "Unnamed lead"}</p><p className="max-w-[170px] truncate text-[10px] text-slate-500">{recipient.email}</p></div>
+                        </div>
+                      </td>
+                      <td className="max-w-[170px] px-3 py-4 text-[10px] text-slate-500">No message yet</td>
+                      <td className="px-3 py-4 text-[10px] text-slate-400">—</td>
+                      <td className="px-3 py-4 text-[10px] text-slate-500">Not started</td>
+                      <td className="px-3 py-4">
+                        <div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200"><div className="h-full w-0 rounded-full bg-violet-600" /></div><span className="text-[10px] font-semibold text-slate-500">0%</span></div>
+                      </td>
+                      <td className="px-3 py-4"><p className="text-[10px] font-medium text-slate-700">Step 1</p><p className="text-[9px] text-slate-400">Waiting for launch</p></td>
+                      <td className="px-3 py-4"><span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-700"><span className="size-1.5 rounded-full bg-blue-500" /> Active</span></td>
+                      <td className="px-3 py-4 text-[10px] text-slate-500">{props.selectedLists.length ? "CSV" : "Manual"}</td>
+                      <td className="px-4 py-4"><div className="flex items-center gap-2"><button type="button" title="Remove lead" onClick={() => props.onToggle(recipient.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button><button type="button" title="Lead details" className="text-slate-400 hover:text-violet-600"><ArrowRight size={14} /></button></div></td>
+                    </tr>
+                  ))}
+                  {!leads.length && <tr><td colSpan={10} className="px-6 py-12 text-center text-xs text-slate-500">No leads match this filter.</td></tr>}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
 }
-
 function SequenceStep(props: {
   steps: Step[];
   recipients: Recipient[];
