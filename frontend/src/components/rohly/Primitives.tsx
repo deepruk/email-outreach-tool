@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description: string; actions?: ReactNode }) {
-  return <div className="mb-6 flex flex-wrap items-end justify-between gap-4" data-testid="page-header"><div>{eyebrow ? <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">{eyebrow}</p> : null}<h1 className="text-[26px] font-semibold tracking-[-0.03em] text-slate-950" data-testid="page-title">{title}</h1><p className="mt-1.5 max-w-2xl text-sm text-slate-500" data-testid="page-description">{description}</p></div>{actions}</div>;
+  return <div className="mb-5 flex flex-wrap items-center justify-between gap-4" data-testid="page-header"><div>{eyebrow ? <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">{eyebrow}</p> : null}<h1 className="text-[22px] font-semibold tracking-[-0.03em] text-slate-950" data-testid="page-title">{title}</h1><p className="mt-1 max-w-2xl text-[13px] text-slate-500" data-testid="page-description">{description}</p></div>{actions}</div>;
 }
 
 export function Surface({ children, className = "", testId }: { children: ReactNode; className?: string; testId: string }) {
-  return <section className={`rounded-xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03),0_8px_24px_rgba(15,23,42,0.025)] ${className}`} data-testid={testId}>{children}</section>;
+  return <section className={`rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.025)] ${className}`} data-testid={testId}>{children}</section>;
 }
 
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
