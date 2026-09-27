@@ -76,7 +76,16 @@ export default function TemplateBuilder() {
   const [testPassed, setTestPassed] = useState(false);
   const [stopOnReply, setStopOnReply] = useState(true);
   const [followUpPriority, setFollowUpPriority] = useState(100);
-  const [distributionMode, setDistributionMode] = useState<"pattern" | "random">("pattern");\n  const [draftId, setDraftId] = useState<string | null>(searchParams.get("draft"));\n  const [draftReady, setDraftReady] = useState(!searchParams.get("draft"));\n  const hydratedDraft = useRef(false);\n\n  const draftQuery = useQuery({\n    queryKey: ["rohly-draft", searchParams.get("draft")],\n    queryFn: () => apiGet<RohlyDraft>(`/workspace/rohly-campaigns/drafts/${searchParams.get("draft")}`),\n    enabled: Boolean(searchParams.get("draft")),\n  });
+  const [distributionMode, setDistributionMode] = useState<"pattern" | "random">("pattern");
+  const [draftId, setDraftId] = useState<string | null>(searchParams.get("draft"));
+  const [draftReady, setDraftReady] = useState(!searchParams.get("draft"));
+  const hydratedDraft = useRef(false);
+
+  const draftQuery = useQuery({
+    queryKey: ["rohly-draft", searchParams.get("draft")],
+    queryFn: () => apiGet<RohlyDraft>(`/workspace/rohly-campaigns/drafts/${searchParams.get("draft")}`),
+    enabled: Boolean(searchParams.get("draft")),
+  });
 
   useEffect(() => {
     const draft = draftQuery.data;
