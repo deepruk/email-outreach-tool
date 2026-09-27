@@ -60,16 +60,16 @@ async def chart_for_days(days: int) -> list[ChartPoint]:
 
 
 def performance(row: dict) -> CampaignPerformance:
-    sent = int(row.get("emails_sent", 0))
+    sent = int(row.get("emails_sent", row.get("sent_count", 0)))
     replies = int(row.get("replies", 0))
     total_steps = max(1, len(row.get("steps", [])))
-    total_planned = max(1, int(row.get("total_leads", 0)) * total_steps)
+    total_planned = max(1, int(row.get("total_leads", row.get("total_count", 0))) * total_steps)
     return CampaignPerformance(
         id=row["id"],
         name=row["name"],
-        status=row.get("status", "draft"),
-        source=row.get("source_filename", "CSV"),
-        leads=int(row.get("total_leads", 0)),
+        status=("running" if row.get("status") == "active" else "draft" if row.get("status") == "queued" else row.get("status", "draft")),
+        source=row.get("source_filename") or row.get("source") or "Campaign",
+        leads=int(row.get("total_leads", row.get("total_count", 0))),
         sent=sent,
         replies=replies,
         positive_replies=int(row.get("positive_replies", 0)),
@@ -90,8 +90,10 @@ async def dashboard() -> CommandCenter:
     previous_replies = await db.replies.count_documents({"received_at": {"$gte": previous_start, "$lt": current_start}})
     positives = await db.replies.count_documents({"received_at": {"$gte": current_start}, "sentiment": "positive"})
     previous_positives = await db.replies.count_documents({"received_at": {"$gte": previous_start, "$lt": current_start}, "sentiment": "positive"})
-    campaigns = await db.csv_campaigns.find().sort("created_at", -1).to_list(100)
-    active = sum(1 for row in campaigns if row.get("status") == "running")
+    csv_campaigns = await db.csv_campaigns.find().sort("created_at", -1).to_list(100)
+    rohly_campaigns = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(100)
+    campaigns = csv_campaigns + rohly_campaigns
+    active = sum(1 for row in campaigns if row.get("status") in {"running", "active"})
     scheduled = await db.scheduled_emails.count_documents({"status": "scheduled"})
     failed = await db.scheduled_emails.count_documents({"status": "failed"})
     attention = await db.inboxes.count_documents({"$or": [{"status": {"$ne": "connected"}}, {"reply_tracking_status": {"$ne": "active"}}]})
@@ -108,8 +110,17 @@ async def dashboard() -> CommandCenter:
         failed=failed,
         inboxes_needing_attention=attention,
         chart=await chart_for_days(14),
-        campaigns=[performance(row) for row in campaigns[:8]],
+        campaigns=[performance(row) for row in sorted(campaigns, key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)[:8]],
     )
+
+
+@router.get("/campaigns", response_model=list[CampaignPerformance])
+async def campaigns() -> list[CampaignPerformance]:
+    csv_rows = await db.csv_campaigns.find().sort("created_at", -1).to_list(1000)
+    rohly_rows = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(1000)
+    rows = csv_rows + rohly_rows
+    rows.sort(key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return [performance(row) for row in rows]
 
 
 @router.get("/search", response_model=list[SearchResult])
