@@ -1,4 +1,5 @@
 import re
+import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
@@ -95,7 +96,7 @@ async def select_workspace(workspace_id: str, response: Response, user: UserPubl
     membership = await db.workspace_memberships.find_one({"user_id": user.id, "workspace_id": workspace_id})
     if not membership:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    response.set_cookie(ACTIVE_WORKSPACE_COOKIE, workspace_id, httponly=True, secure=False, samesite="lax", max_age=30 * 24 * 60 * 60, path="/")
+    response.set_cookie(ACTIVE_WORKSPACE_COOKIE, workspace_id, httponly=True, secure=os.environ.get("APP_URL", "").startswith("https://"), samesite="lax", max_age=30 * 24 * 60 * 60, path="/")
     response.status_code = 204
     return response
 
