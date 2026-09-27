@@ -417,6 +417,14 @@ async def launch_campaign(campaign_id: str) -> dict:
     return response_campaign
 
 
+@router.get("/{campaign_id}/activity")
+async def campaign_activity(campaign_id: str) -> list[dict]:
+    rows = await db.scheduled_emails.find({"campaign_id": campaign_id, "source_type": "rohly_template"}).sort("scheduled_at", 1).to_list(5000)
+    for row in rows:
+        row.pop("_id", None)
+    return rows
+
+
 @router.delete("/{campaign_id}", status_code=204)
 async def delete_campaign(campaign_id: str):
     campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template"})
