@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from lib.db import db
 from routers.auth import require_user
+from models.auth import UserPublic
 from routers.scheduler import send_gmail_message
 
 router = APIRouter(prefix="/workspace/rohly-campaigns", tags=["rohly-campaigns"], dependencies=[Depends(require_user)])
@@ -151,26 +152,26 @@ def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict
 
 
 @router.get("/campaigns")
-async def list_campaigns() -> list[dict]:
-    rows = await db.campaigns.find({"campaign_type": "rohly_template"}).sort("created_at", -1).to_list(1000)
+async def list_campaigns(user: UserPublic = Depends(require_user)) -> list[dict]:
+    rows = await db.campaigns.find({"campaign_type": "rohly_template", "user_id": user.id}).sort("created_at", -1).to_list(1000)
     for row in rows:
         row.pop("_id", None)
     return rows
 
 
 @router.get("/templates")
-async def templates() -> list[dict]:
-    return await db.templates.find().sort("created_at", -1).to_list(1000)
+async def templates(user: UserPublic = Depends(require_user)) -> list[dict]:
+    return await db.templates.find({"user_id": user.id}).sort("created_at", -1).to_list(1000)
 
 
 @router.get("/recipients")
-async def recipients() -> list[dict]:
-    return await db.recipients.find().sort("created_at", -1).to_list(5000)
+async def recipients(user: UserPublic = Depends(require_user)) -> list[dict]:
+    return await db.recipients.find({"user_id": user.id}).sort("created_at", -1).to_list(5000)
 
 
 @router.get("/inboxes")
-async def inboxes() -> list[dict]:
-    return await db.inboxes.find({"status": "connected"}).sort("email", 1).to_list(1000)
+async def inboxes(user: UserPublic = Depends(require_user)) -> list[dict]:
+    return await db.inboxes.find({"status": "connected", "user_id": user.id}).sort("email", 1).to_list(1000)
 
 
 class DraftCreate(BaseModel):
@@ -194,8 +195,8 @@ class DraftCreate(BaseModel):
 
 
 @router.get("/drafts")
-async def list_drafts() -> list[dict]:
-    return await db.rohly_drafts.find().sort("updated_at", -1).to_list(1000)
+async def list_drafts(user: UserPublic = Depends(require_user)) -> list[dict]:
+    return await db.rohly_drafts.find({"user_id": user.id}).sort("updated_at", -1).to_list(1000)
 
 
 @router.get("/drafts/{draft_id}")
@@ -208,7 +209,7 @@ async def get_draft(draft_id: str) -> dict:
 
 
 @router.post("/drafts")
-async def save_draft(input: DraftCreate) -> dict:
+async def save_draft(input: DraftCreate, user: UserPublic = Depends(require_user)) -> dict:
     draft_id = input.id or uuid.uuid4().hex
     now = datetime.now(timezone.utc)
     draft = {
@@ -231,9 +232,10 @@ async def save_draft(input: DraftCreate) -> dict:
         "distribution_mode": input.distribution_mode,
         "updated_at": now,
         "created_at": now,
+        "user_id": user.id,
     }
     await db.rohly_drafts.update_one(
-        {"id": draft_id},
+        {"id": draft_id, "user_id": user.id},
         {"$set": {k: v for k, v in draft.items() if k != "created_at"}, "$setOnInsert": {"created_at": now}},
         upsert=True,
     )
