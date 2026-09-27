@@ -306,11 +306,11 @@ async def delete_inbox(inbox_id: str, user: UserPublic = Depends(require_user)) 
     inbox = await db.inboxes.find_one({"id": inbox_id, "user_id": user.id})
     if not inbox:
         raise HTTPException(status_code=404, detail="Inbox not found")
-    usage = await db.campaigns.count_documents({"inbox_id": inbox_id})
+    usage = await db.campaigns.count_documents({"inbox_id": inbox_id, "user_id": user.id})
     if usage:
         raise HTTPException(status_code=409, detail="Inbox is used by an existing campaign")
-    await db.oauth_tokens.delete_one({"inbox_id": inbox_id})
-    await db.inboxes.delete_one({"id": inbox_id})
+    await db.oauth_tokens.delete_one({"inbox_id": inbox_id, "user_id": user.id})
+    await db.inboxes.delete_one({"id": inbox_id, "user_id": user.id})
     return Response(status_code=204)
 
 
@@ -320,7 +320,7 @@ async def update_inbox(inbox_id: str, input: InboxUpdate, user: UserPublic = Dep
     if not inbox:
         raise HTTPException(status_code=404, detail="Inbox not found")
     updates = input.model_dump()
-    await db.inboxes.update_one({"id": inbox_id}, {"$set": updates})
+    await db.inboxes.update_one({"id": inbox_id, "user_id": user.id}, {"$set": updates})
     return Inbox(**{**inbox, **updates})
 
 
@@ -342,10 +342,10 @@ async def delete_recipient(recipient_id: str, user: UserPublic = Depends(require
     recipient = await db.recipients.find_one({"id": recipient_id, "user_id": user.id})
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
-    usage = await db.campaigns.count_documents({"recipient_ids": recipient_id})
+    usage = await db.campaigns.count_documents({"recipient_ids": recipient_id, "user_id": user.id})
     if usage:
         raise HTTPException(status_code=409, detail="Recipient is used by an existing campaign")
-    await db.recipients.delete_one({"id": recipient_id})
+    await db.recipients.delete_one({"id": recipient_id, "user_id": user.id})
     return Response(status_code=204)
 
 
@@ -367,10 +367,10 @@ async def delete_template(template_id: str, user: UserPublic = Depends(require_u
     template = await db.templates.find_one({"id": template_id, "user_id": user.id})
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    usage = await db.campaigns.count_documents({"template_id": template_id})
+    usage = await db.campaigns.count_documents({"template_id": template_id, "user_id": user.id})
     if usage:
         raise HTTPException(status_code=409, detail="Template is used by an existing campaign")
-    await db.templates.delete_one({"id": template_id})
+    await db.templates.delete_one({"id": template_id, "user_id": user.id})
     return Response(status_code=204)
 
 
@@ -409,7 +409,7 @@ async def delete_campaign(campaign_id: str, user: UserPublic = Depends(require_u
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.get("status") == "active":
         raise HTTPException(status_code=409, detail="Pause the campaign before deleting it")
-    await db.campaigns.delete_one({"id": campaign_id})
+    await db.campaigns.delete_one({"id": campaign_id, "user_id": user.id})
     return Response(status_code=204)
 
 
@@ -488,8 +488,8 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
 
 
 @router.get("/history", response_model=list[HistoryEntry])
-async def list_history() -> list[HistoryEntry]:
-    rows = await db.history.find().sort("sent_at", -1).to_list(1000)
+async def list_history(user: UserPublic = Depends(require_user)) -> list[HistoryEntry]:
+    rows = await db.history.find({"user_id": user.id}).sort("sent_at", -1).to_list(1000)
     return [HistoryEntry(**row) for row in rows]
 
 
