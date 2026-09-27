@@ -100,7 +100,7 @@ async def ensure_owner() -> None:
         )
         await db.users.insert_one(owner.model_dump())
         owner_id = owner.id
-    for collection_name in ("campaigns", "csv_campaigns", "csv_sources", "inboxes", "recipients", "templates", "rohly_drafts", "activities", "history", "scheduled_emails", "oauth_tokens"):
+    for collection_name in ("campaigns", "csv_campaigns", "csv_sources", "inboxes", "recipients", "templates", "rohly_drafts", "activities", "history", "scheduled_emails", "oauth_tokens", "replies", "reply_messages"):
         await db[collection_name].update_many({"user_id": {"$exists": False}}, {"$set": {"user_id": owner_id}})
 
 
