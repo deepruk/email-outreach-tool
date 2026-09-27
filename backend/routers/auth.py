@@ -8,7 +8,7 @@ import secrets
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 
 from lib.db import db
-from models.auth import LoginRequest, PasswordUpdate, ProfileUpdate, UserPublic, UserRecord
+from models.auth import LoginRequest, PasswordUpdate, ProfileUpdate, SignupRequest, UserPublic, UserRecord
 from models.scheduler import new_id
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -72,16 +72,12 @@ async def require_user(rohly_session: str | None = Cookie(default=None)) -> User
     return UserPublic(**user)
 
 
-@router.post("/login", response_model=UserPublic)
-async def login(input: LoginRequest, response: Response) -> UserPublic:
-    user = await db.users.find_one({"email": input.email.lower()})
-    if not user or not verify_password(input.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Email or password is incorrect")
+async def create_session(user: UserPublic, response: Response) -> UserPublic:
     raw_token = secrets.token_urlsafe(48)
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
     await db.sessions.insert_one({
         "id": new_id(),
-        "user_id": user["id"],
+        "user_id": user.id,
         "token_hash": hashlib.sha256(raw_token.encode()).hexdigest(),
         "created_at": datetime.now(timezone.utc),
         "expires_at": expires_at,
@@ -95,7 +91,32 @@ async def login(input: LoginRequest, response: Response) -> UserPublic:
         max_age=30 * 24 * 60 * 60,
         path="/",
     )
-    return UserPublic(**user)
+    return user
+
+
+@router.post("/signup", response_model=UserPublic, status_code=201)
+async def signup(input: SignupRequest, response: Response) -> UserPublic:
+    email = input.email.strip().lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    user = UserRecord(
+        id=new_id(),
+        email=email,
+        name=input.name.strip(),
+        role="user",
+        created_at=datetime.now(timezone.utc),
+        password_hash=hash_password(input.password),
+    )
+    await db.users.insert_one(user.model_dump())
+    return await create_session(UserPublic(**user.model_dump()), response)
+
+
+@router.post("/login", response_model=UserPublic)
+async def login(input: LoginRequest, response: Response) -> UserPublic:
+    user = await db.users.find_one({"email": input.email.strip().lower()})
+    if not user or not verify_password(input.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Email or password is incorrect")
+    return await create_session(UserPublic(**user), response)
 
 
 @router.post("/logout", status_code=204)
