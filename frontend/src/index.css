@@ -201,3 +201,21 @@
 .dark [data-testid="desktop-sidebar"] .rohly-option-active { background: linear-gradient(90deg, rgba(79,70,229,.25), rgba(14,165,233,.12)) !important; color: #c7d2fe !important; }
 .dark [data-testid="command-palette"], .dark [data-testid="profile-menu"], .dark [data-testid="notifications-panel"], .dark [data-testid="help-panel"] { background-color: #111827 !important; border-color: #334155 !important; color: #e5e7eb !important; }
 .dark .rohly-scrollbar { scrollbar-color: #475569 transparent; }
+
+
+/* Dark-mode contrast fixes: selected/list states must not keep light-theme fills. */
+.dark .bg-indigo-50,
+.dark .bg-indigo-50\/70,
+.dark .bg-indigo-50\/50 {
+  background-color: rgba(49, 46, 129, .28) !important;
+}
+.dark .hover\:bg-slate-50:hover { background-color: #172033 !important; }
+.dark .hover\:bg-indigo-50\/70:hover { background-color: rgba(49, 46, 129, .24) !important; }
+.dark .text-indigo-800 { color: #c7d2fe !important; }
+.dark .text-indigo-700, .dark .text-indigo-600 { color: #a5b4fc !important; }
+.dark .border-indigo-200, .dark .border-indigo-300 { border-color: #4f46e5 !important; }
+.dark .bg-amber-50 { background-color: rgba(120, 53, 15, .24) !important; }
+.dark .text-amber-700 { color: #fcd34d !important; }
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, .42) !important; }
+.dark [data-testid="master-inbox-page"] { background: #0b1220 !important; }
+.dark [data-testid="master-inbox-page"] button { color: inherit; }
