@@ -345,8 +345,8 @@ export default function TemplateBuilder() {
   };
 
   return (
-    <div data-testid="template-campaign-wizard-page" className="-mx-4 -mt-4 min-h-[calc(100vh-5rem)] bg-slate-50 sm:-mx-6 lg:-mx-7">
-      <div className="border-b border-slate-200 bg-white px-6 py-4">
+    <div data-testid="template-campaign-wizard-page" className="-mx-4 -mt-4 min-h-[calc(100vh-5rem)] bg-gradient-to-br from-slate-50 via-indigo-50/35 to-sky-50/40 sm:-mx-6 lg:-mx-7">
+      <div className="sticky top-14 z-20 border-b border-indigo-100/80 bg-white/90 px-6 py-4 shadow-[0_8px_30px_rgba(79,70,229,.05)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-4">
           <Link to="/campaigns" className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-violet-600">
             <ArrowLeft size={14} /> Campaigns
@@ -371,7 +371,7 @@ export default function TemplateBuilder() {
               key={label}
               type="button"
               onClick={() => setActiveStep(index)}
-              className={`relative whitespace-nowrap px-4 py-2 text-xs font-semibold transition ${activeStep === index ? "text-violet-600" : "text-slate-500 hover:text-slate-800"}`}
+              className={`rohly-interactive relative whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold transition-all ${activeStep === index ? "rohly-option-active bg-indigo-50 text-indigo-700" : "text-slate-500 hover:bg-white hover:text-slate-800"}`}
             >
               {label}{label === "Sequence" && steps.length > 0 ? ` (${steps.length})` : ""}
               {activeStep === index && <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-violet-600" />}
@@ -597,7 +597,7 @@ function LeadListStep(props: {
             <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 px-4 pt-3">
               {tabItems.map(([key, label, count]) => (
                 <button key={key} type="button" onClick={() => setTab(key)}
-                  className={`rounded-t-md border-b-2 px-3 py-2 text-[11px] font-semibold ${tab === key ? "border-violet-600 text-violet-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}>
+                  className={`rohly-interactive rounded-t-md border-b-2 px-3 py-2 text-[11px] font-semibold transition-all ${tab === key ? "bg-violet-50 border-violet-600 text-violet-600" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}>
                   {label} ({count})
                 </button>
               ))}
@@ -711,7 +711,7 @@ function SequenceStep(props: {
                 <button
                   type="button"
                   onClick={() => setSelectedIndex(index)}
-                  className={`w-full rounded-lg border p-3 text-left transition ${safeIndex === index ? "border-violet-400 bg-violet-50 shadow-sm" : "border-slate-200 bg-white hover:border-violet-200 hover:bg-slate-50"}`}
+                  className={`rohly-interactive w-full rounded-lg border p-3 text-left transition-all ${safeIndex === index ? "rohly-option-active border-violet-400 bg-gradient-to-r from-violet-50 to-indigo-50 shadow-sm" : "border-slate-200 bg-white hover:border-violet-200 hover:bg-slate-50"}`}
                 >
                   <div className="flex items-center gap-2">
                     <span className={`flex size-6 shrink-0 items-center justify-center rounded bg-violet-100 text-[10px] font-bold text-violet-700`}>{index + 1}</span>
@@ -931,11 +931,11 @@ function SettingsStep(props: {
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="text-sm font-semibold">Campaign Behavior</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <button type="button" onClick={() => props.setStopOnReply(true)} className={`rounded-lg border p-4 text-left ${props.stopOnReply ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Stop on replies</p><p className="mt-1 text-[10px] text-slate-500">Recommended for engagement.</p></button>
-              <button type="button" onClick={() => props.setStopOnReply(false)} className={`rounded-lg border p-4 text-left ${!props.stopOnReply ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Continue follow-ups</p><p className="mt-1 text-[10px] text-slate-500">Keep the sequence running.</p></button>
+              <button type="button" onClick={() => props.setStopOnReply(true)} className={`rohly-interactive rounded-lg border p-4 text-left transition-all ${props.stopOnReply ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Stop on replies</p><p className="mt-1 text-[10px] text-slate-500">Recommended for engagement.</p></button>
+              <button type="button" onClick={() => props.setStopOnReply(false)} className={`rohly-interactive rounded-lg border p-4 text-left transition-all ${!props.stopOnReply ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Continue follow-ups</p><p className="mt-1 text-[10px] text-slate-500">Keep the sequence running.</p></button>
               <div className="rounded-lg border border-slate-200 p-4"><p className="text-xs font-semibold">Follow-up Priority</p><input type="range" min={0} max={100} value={props.followUpPriority} onChange={(e) => props.setFollowUpPriority(Number(e.target.value))} className="mt-4 w-full accent-violet-600" /><div className="mt-2 flex justify-between text-[10px] text-slate-400"><span>New Leads</span><span>{props.followUpPriority}% Follow-ups</span></div></div>
             </div>
-            <div className="mt-4"><p className="text-xs font-semibold">Email Distribution</p><div className="mt-2 grid gap-3 md:grid-cols-2"><button type="button" onClick={() => props.setDistributionMode("pattern")} className={`rounded-lg border p-4 text-left ${props.distributionMode === "pattern" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Pattern-based</p><p className="mt-1 text-[10px] text-slate-500">Even distribution across selected inboxes.</p></button><button type="button" onClick={() => props.setDistributionMode("random")} className={`rounded-lg border p-4 text-left ${props.distributionMode === "random" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Randomized</p><p className="mt-1 text-[10px] text-slate-500">Random inbox selection for each send.</p></button></div></div>
+            <div className="mt-4"><p className="text-xs font-semibold">Email Distribution</p><div className="mt-2 grid gap-3 md:grid-cols-2"><button type="button" onClick={() => props.setDistributionMode("pattern")} className={`rohly-interactive rounded-lg border p-4 text-left transition-all ${props.distributionMode === "pattern" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Pattern-based</p><p className="mt-1 text-[10px] text-slate-500">Even distribution across selected inboxes.</p></button><button type="button" onClick={() => props.setDistributionMode("random")} className={`rohly-interactive rounded-lg border p-4 text-left transition-all ${props.distributionMode === "random" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Randomized</p><p className="mt-1 text-[10px] text-slate-500">Random inbox selection for each send.</p></button></div></div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">
