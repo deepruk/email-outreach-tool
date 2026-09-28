@@ -219,3 +219,23 @@
 .dark .border-amber-200 { border-color: rgba(245, 158, 11, .42) !important; }
 .dark [data-testid="master-inbox-page"] { background: #0b1220 !important; }
 .dark [data-testid="master-inbox-page"] button { color: inherit; }
+
+
+/* Native mobile shell: iPhone/Android safe areas and touch ergonomics. */
+html, body, #root { min-height: 100%; }
+body { overscroll-behavior-y: none; }
+@media (max-width: 1023px) {
+  [data-testid="topbar"] {
+    height: calc(56px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+  [data-testid="app-scroll-viewport"] {
+    top: calc(56px + env(safe-area-inset-top));
+    bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+  .mobile-bottom-nav {
+    height: calc(68px + env(safe-area-inset-bottom));
+  }
+  button, a, input, select, textarea { touch-action: manipulation; }
+}
+.dark .mobile-bottom-nav { background-color: rgba(15,23,42,.97) !important; border-color: #263247 !important; }
