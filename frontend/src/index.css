@@ -56,7 +56,7 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.49 0.21 264);
+    --primary: oklch(0.55 0.24 292);
     --primary-foreground: oklch(0.985 0 0);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
@@ -67,7 +67,7 @@
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.56 0.18 264);
+    --ring: oklch(0.55 0.20 292);
     --chart-1: oklch(0.55 0.2 264);
     --chart-2: oklch(0.69 0.16 155);
     --chart-3: oklch(0.72 0.15 74);
@@ -123,17 +123,16 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply text-slate-950 antialiased;
-    background: linear-gradient(135deg, #f8fafc 0%, #f5f7ff 45%, #f0fdfa 100%);
+    @apply bg-[#f7f7f9] text-slate-950 antialiased;
     }
   html {
     @apply font-sans;
     }
   h1, h2, h3, h4 {
-    font-family: 'Outfit Variable', sans-serif;
+    font-family: 'Geist Variable', sans-serif;
   }
   button, a, input, select, textarea {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/30 focus-visible:ring-offset-1;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600/25 focus-visible:ring-offset-1;
   }
 }
 
@@ -153,27 +152,27 @@
   font-size: 11px;
   line-height: 1.55;
 }
-
-@layer utilities {
-  .rohly-app-bg {
-    background:
-      radial-gradient(circle at 82% -10%, rgba(99,102,241,.11), transparent 28rem),
-      radial-gradient(circle at 16% 8%, rgba(14,165,233,.08), transparent 24rem),
-      linear-gradient(135deg,#f8fafc 0%,#f6f7ff 50%,#f3faf9 100%);
-  }
-  .rohly-glass { background: rgba(255,255,255,.84); backdrop-filter: blur(16px); }
-  .rohly-surface { transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease; }
-  .rohly-surface:hover { border-color: rgba(99,102,241,.20); box-shadow: 0 12px 32px rgba(15,23,42,.07); }
-  .rohly-interactive { transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, color 150ms ease, border-color 150ms ease; }
-  .rohly-interactive:hover { transform: translateY(-1px); }
-  .rohly-interactive:active { transform: translateY(0) scale(.975); }
-  .rohly-page-enter { animation: rohly-page-enter 240ms cubic-bezier(.2,.8,.2,1) both; }
-  .rohly-pop { animation: rohly-pop 180ms cubic-bezier(.2,.8,.2,1) both; transform-origin: top right; }
-  .rohly-option-active { box-shadow: 0 8px 24px rgba(79,70,229,.12), inset 0 0 0 1px rgba(99,102,241,.12); }
+@layer base {
+  ::selection { background: rgb(237 233 254); color: rgb(46 16 101); }
+  table th { letter-spacing: .045em; }
 }
-@keyframes rohly-page-enter { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:translateY(0) } }
-@keyframes rohly-pop { from { opacity:0; transform:translateY(-5px) scale(.98) } to { opacity:1; transform:translateY(0) scale(1) } }
-@media (prefers-reduced-motion: reduce) {
-  .rohly-page-enter,.rohly-pop { animation:none!important }
-  .rohly-surface,.rohly-interactive { transition:none!important; transform:none!important }
+
+/* Rohly premium SaaS polish */
+@layer base {
+  body { background: #f8f9fb; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  table tbody tr { transition: background-color 120ms ease; }
+}
+
+@layer components {
+  .rohly-scrollbar { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+}
+
+/* Rohly 2026 visual system — approved mockup direction */
+@layer base {
+  body { background: #f7f8fc; color: #101828; }
+}
+@layer components {
+  .rohly-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+  .rohly-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 }
