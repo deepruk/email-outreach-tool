@@ -246,6 +246,33 @@ async def update_reply(reply_id: str, input: ReplyUpdate, user: UserPublic = Dep
     return Reply(**{**row, **updates})
 
 
+@router.get("/replies/{reply_id}/messages")
+async def reply_messages(reply_id: str, user: UserPublic = Depends(require_user)) -> list[dict]:
+    from fastapi import HTTPException
+    row = await db.replies.find_one({"id": reply_id, "user_id": user.id})
+    if not row:
+        raise HTTPException(status_code=404, detail="Reply not found")
+    messages = [{
+        "id": row.get("gmail_message_id") or reply_id,
+        "direction": "inbound",
+        "body": row.get("snippet", ""),
+        "sent_at": row.get("received_at"),
+        "sender_name": row.get("sender_name") or row.get("recipient_email"),
+        "sender_email": row.get("recipient_email"),
+    }]
+    outbound = await db.reply_messages.find({"reply_id": reply_id, "user_id": user.id}).sort("sent_at", 1).to_list(500)
+    messages.extend({
+        "id": item.get("id") or str(item.get("_id", "")),
+        "direction": "outbound",
+        "body": item.get("body", ""),
+        "sent_at": item.get("sent_at"),
+        "sender_name": "You",
+        "sender_email": row.get("inbox_email"),
+    } for item in outbound)
+    messages.sort(key=lambda item: aware(item.get("sent_at")) or datetime.min.replace(tzinfo=timezone.utc))
+    return messages
+
+
 @router.post("/replies/{reply_id}/send")
 async def send_reply(reply_id: str, input: ReplySendRequest, user: UserPublic = Depends(require_user)) -> dict[str, str]:
     from fastapi import HTTPException
