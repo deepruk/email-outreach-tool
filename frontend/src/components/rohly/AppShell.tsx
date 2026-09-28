@@ -30,7 +30,7 @@ const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/campaigns", label: "Campaigns", icon: Send },
   { to: "/leads", label: "Leads", icon: Users },
-  { to: "/inbox", label: "Unified Inbox", icon: Inbox },
+  { to: "/inbox", label: "Master Inbox", icon: Inbox },
   { to: "/inboxes", label: "Inboxes", icon: Mail },
   { to: "/warm-up", label: "Inbox Health", icon: ShieldCheck },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
