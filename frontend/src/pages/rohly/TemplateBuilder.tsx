@@ -346,7 +346,7 @@ export default function TemplateBuilder() {
 
   return (
     <div data-testid="template-campaign-wizard-page" className="-mx-4 -mt-4 min-h-[calc(100vh-5rem)] bg-gradient-to-br from-slate-50 via-indigo-50/35 to-sky-50/40 sm:-mx-6 lg:-mx-7">
-      <div className="sticky top-14 z-20 border-b border-indigo-100/80 bg-white/90 px-6 py-4 shadow-[0_8px_30px_rgba(79,70,229,.05)] backdrop-blur-xl">
+      <div className="sticky top-14 z-20 border-b border-indigo-100/80 bg-white/90 px-5 py-3 shadow-[0_8px_30px_rgba(79,70,229,.05)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-4">
           <Link to="/campaigns" className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-violet-600">
             <ArrowLeft size={14} /> Campaigns
@@ -380,7 +380,7 @@ export default function TemplateBuilder() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-[1500px] p-5 lg:p-7">
+      <div className="mx-auto max-w-[1500px] p-4 lg:p-5">
         {activeStep === 0 && (
           <LeadListStep
             recipients={recipients}
@@ -603,7 +603,7 @@ function LeadListStep(props: {
               ))}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <div className="relative w-full max-w-md">
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search leads by name, email, or company..." className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 pl-3 pr-3 text-xs outline-none focus:border-violet-400 focus:bg-white" />
               </div>
@@ -632,23 +632,23 @@ function LeadListStep(props: {
                 <tbody className="divide-y divide-slate-100">
                   {leads.map((recipient) => (
                     <tr key={recipient.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-4 align-top"><input type="checkbox" checked onChange={() => props.onToggle(recipient.id)} className="size-3.5 accent-violet-600" /></td>
-                      <td className="px-3 py-4 align-top">
+                      <td className="px-4 py-3 align-top"><input type="checkbox" checked onChange={() => props.onToggle(recipient.id)} className="size-3.5 accent-violet-600" /></td>
+                      <td className="px-3 py-3 align-top">
                         <div className="flex items-start gap-2">
                           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{(recipient.name || recipient.email).slice(0, 2).toUpperCase()}</span>
                           <div className="min-w-0"><p className="max-w-[145px] truncate text-xs font-semibold text-slate-800">{recipient.name || "Unnamed lead"}</p><p className="max-w-[170px] truncate text-[10px] text-slate-500">{recipient.email}</p></div>
                         </div>
                       </td>
-                      <td className="max-w-[170px] px-3 py-4 text-[10px] text-slate-500">No message yet</td>
-                      <td className="px-3 py-4 text-[10px] text-slate-400">—</td>
-                      <td className="px-3 py-4 text-[10px] text-slate-500">Not started</td>
-                      <td className="px-3 py-4">
+                      <td className="max-w-[170px] px-3 py-3 text-[10px] text-slate-500">No message yet</td>
+                      <td className="px-3 py-3 text-[10px] text-slate-400">—</td>
+                      <td className="px-3 py-3 text-[10px] text-slate-500">Not started</td>
+                      <td className="px-3 py-3">
                         <div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200"><div className="h-full w-0 rounded-full bg-violet-600" /></div><span className="text-[10px] font-semibold text-slate-500">0%</span></div>
                       </td>
-                      <td className="px-3 py-4"><p className="text-[10px] font-medium text-slate-700">Step 1</p><p className="text-[9px] text-slate-400">Waiting for launch</p></td>
-                      <td className="px-3 py-4"><span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-700"><span className="size-1.5 rounded-full bg-blue-500" /> Active</span></td>
-                      <td className="px-3 py-4 text-[10px] text-slate-500">{props.selectedLists.length ? "CSV" : "Manual"}</td>
-                      <td className="px-4 py-4"><div className="flex items-center gap-2"><button type="button" title="Remove lead" onClick={() => props.onToggle(recipient.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button><button type="button" title="Lead details" className="text-slate-400 hover:text-violet-600"><ArrowRight size={14} /></button></div></td>
+                      <td className="px-3 py-3"><p className="text-[10px] font-medium text-slate-700">Step 1</p><p className="text-[9px] text-slate-400">Waiting for launch</p></td>
+                      <td className="px-3 py-3"><span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-700"><span className="size-1.5 rounded-full bg-blue-500" /> Active</span></td>
+                      <td className="px-3 py-3 text-[10px] text-slate-500">{props.selectedLists.length ? "CSV" : "Manual"}</td>
+                      <td className="px-4 py-3"><div className="flex items-center gap-2"><button type="button" title="Remove lead" onClick={() => props.onToggle(recipient.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button><button type="button" title="Lead details" className="text-slate-400 hover:text-violet-600"><ArrowRight size={14} /></button></div></td>
                     </tr>
                   ))}
                   {!leads.length && <tr><td colSpan={10} className="px-6 py-12 text-center text-xs text-slate-500">No leads match this filter.</td></tr>}
@@ -737,7 +737,7 @@ function SequenceStep(props: {
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
             <div>
               <span className="text-[10px] text-slate-400">Inbox Preview</span>
               <span className="mx-2 text-[10px] text-slate-300">|</span>
@@ -750,7 +750,7 @@ function SequenceStep(props: {
             </select>
           </div>
 
-          <div className="p-5">
+          <div className="p-4">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="flex size-8 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">{safeIndex + 1}</span>
@@ -825,7 +825,7 @@ function EmailAccountsStep(props: {
         <Mail className="mx-auto size-12 rounded-xl bg-violet-50 p-3 text-violet-600" />
         <h2 className="mt-4 text-base font-semibold">Select Email Accounts for Your Campaign</h2>
         <p className="mx-auto mt-2 max-w-xl text-xs leading-5 text-slate-500">Emails are distributed across your selected inboxes according to their available sending capacity.</p>
-        <div className="mt-7 grid gap-3 md:grid-cols-3">
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
           {[
             ["Smart Filtering", "Filter by connection and account status."],
             ["Real-time Capacity", "See each account's daily sending limit."],
@@ -835,15 +835,15 @@ function EmailAccountsStep(props: {
         <Button variant="outline" onClick={props.onRefresh} className="mt-6 gap-2"><RefreshCw size={13} /> Refresh accounts</Button>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-5 py-4"><h2 className="text-sm font-semibold">{props.selectedInboxes.length} accounts selected</h2></div>
+        <div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold">{props.selectedInboxes.length} accounts selected</h2></div>
         {props.inboxes.map((inbox) => (
-          <label key={inbox.id} className="flex cursor-pointer items-center gap-4 border-b border-slate-100 px-5 py-4 last:border-0 hover:bg-slate-50">
+          <label key={inbox.id} className="flex cursor-pointer items-center gap-4 border-b border-slate-100 px-4 py-3 last:border-0 hover:bg-slate-50">
             <input type="checkbox" checked={props.selectedInboxes.includes(inbox.id)} onChange={() => props.onToggle(inbox.id)} className="size-4 accent-violet-600" />
             <div className="flex-1"><p className="text-xs font-semibold">{inbox.display_name}</p><p className="mt-0.5 text-[11px] text-slate-500">{inbox.email}</p></div>
             <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">{inbox.daily_sending_limit}/day</span>
           </label>
         ))}
-        {!props.inboxes.length && <div className="p-8 text-center text-xs text-slate-500">No connected Gmail accounts. Connect an inbox first.</div>}
+        {!props.inboxes.length && <div className="p-6 text-center text-xs text-slate-500">No connected Gmail accounts. Connect an inbox first.</div>}
       </div>
     </div>
   );
@@ -911,7 +911,7 @@ function SettingsStep(props: {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2"><CalendarClock size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Send Schedule</h2></div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="text-xs font-semibold">Timezone<select value={props.timezone} onChange={(e) => props.setTimezone(e.target.value)} className="mt-2 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs"><option>Asia/Kolkata</option><option>America/Toronto</option><option>America/New_York</option><option>Europe/London</option><option>UTC</option></select></label>
@@ -928,7 +928,7 @@ function SettingsStep(props: {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold">Campaign Behavior</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <button type="button" onClick={() => props.setStopOnReply(true)} className={`rohly-interactive rounded-lg border p-4 text-left transition-all ${props.stopOnReply ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Stop on replies</p><p className="mt-1 text-[10px] text-slate-500">Recommended for engagement.</p></button>
@@ -938,7 +938,7 @@ function SettingsStep(props: {
             <div className="mt-4"><p className="text-xs font-semibold">Email Distribution</p><div className="mt-2 grid gap-3 md:grid-cols-2"><button type="button" onClick={() => props.setDistributionMode("pattern")} className={`rohly-interactive rounded-lg border p-4 text-left transition-all ${props.distributionMode === "pattern" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Pattern-based</p><p className="mt-1 text-[10px] text-slate-500">Even distribution across selected inboxes.</p></button><button type="button" onClick={() => props.setDistributionMode("random")} className={`rohly-interactive rounded-lg border p-4 text-left transition-all ${props.distributionMode === "random" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><p className="text-xs font-semibold">Randomized</p><p className="mt-1 text-[10px] text-slate-500">Random inbox selection for each send.</p></button></div></div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2"><FlaskConical size={16} className="text-violet-600" /><h2 className="text-sm font-semibold">Test email (optional)</h2>{props.testPassed && <span className="ml-auto rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700"><Check size={11} className="mr-1 inline" /> Test passed</span>}</div>
             <p className="mt-1 text-[11px] text-slate-500">Send a test email to yourself if you want to verify the message before launching. This is optional.</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input value={props.testEmail} onChange={(e) => props.setTestEmail(e.target.value)} placeholder="your@email.com" type="email" /><Button onClick={props.onTest} disabled={props.testPending || !props.selectedInboxes.length} className="gap-2 bg-violet-600 hover:bg-violet-700"><Mail size={14} />{props.testPending ? "Sending…" : "Send test email"}</Button></div>
@@ -962,12 +962,12 @@ function ListPicker(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-semibold">Import from Saved Lists</h2><p className="mt-1 text-xs text-slate-500">Only new contacts are added; duplicates are skipped automatically.</p></div><Button variant="ghost" size="icon" onClick={props.onClose}><X size={17} /></Button></div>
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><div><h2 className="text-lg font-semibold">Import from Saved Lists</h2><p className="mt-1 text-xs text-slate-500">Only new contacts are added; duplicates are skipped automatically.</p></div><Button variant="ghost" size="icon" onClick={props.onClose}><X size={17} /></Button></div>
         <div className="flex gap-2 border-b border-slate-100 px-5 py-3"><Button variant="outline" size="sm" onClick={props.onRefresh} className="gap-1"><RefreshCw size={13} /> Refresh</Button><label className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-violet-600 px-3 py-2 text-xs font-semibold text-white">
             <Upload size={13} /> Upload CSV
             <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
           </label></div>
-        <div className="max-h-[60vh] overflow-auto p-5">{props.lists.length ? props.lists.map((list) => { const active = props.selectedLists.includes(list.id); return <div key={list.id} className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 p-4"><FileSpreadsheet size={17} className="text-violet-600" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{list.filename}</p><p className="mt-1 text-[10px] text-slate-500">{list.row_count} contacts</p></div><Button size="sm" variant={active ? "outline" : "default"} disabled={active || props.pending} onClick={() => props.onUse(list.id)}>{active ? "Added" : props.pending ? "Adding…" : "Add list"}</Button></div>; }) : <div className="py-10 text-center text-xs text-slate-500">No saved lists found. Upload a CSV first.</div>}</div>
+        <div className="max-h-[60vh] overflow-auto p-4">{props.lists.length ? props.lists.map((list) => { const active = props.selectedLists.includes(list.id); return <div key={list.id} className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 p-4"><FileSpreadsheet size={17} className="text-violet-600" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{list.filename}</p><p className="mt-1 text-[10px] text-slate-500">{list.row_count} contacts</p></div><Button size="sm" variant={active ? "outline" : "default"} disabled={active || props.pending} onClick={() => props.onUse(list.id)}>{active ? "Added" : props.pending ? "Adding…" : "Add list"}</Button></div>; }) : <div className="py-10 text-center text-xs text-slate-500">No saved lists found. Upload a CSV first.</div>}</div>
         <div className="flex justify-end border-t border-slate-200 px-5 py-3"><Button variant="outline" onClick={props.onClose}>Done</Button></div>
       </div>
     </div>
