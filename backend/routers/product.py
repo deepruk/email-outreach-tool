@@ -302,7 +302,15 @@ async def send_reply(reply_id: str, input: ReplySendRequest, user: UserPublic = 
         "sent_at": datetime.now(timezone.utc),
     })
     await db.replies.update_one({"id": reply_id, "user_id": user.id}, {"$set": {"read": True}})
-    return {"status": "sent", "message_id": result.get("id", "")}
+    sent_at = datetime.now(timezone.utc)
+    return {
+        "id": result.get("id") or f"sent-{int(sent_at.timestamp() * 1000)}",
+        "direction": "outbound",
+        "body": input.body,
+        "sent_at": sent_at,
+        "sender_name": "You",
+        "sender_email": row.get("inbox_email", ""),
+    }
 
 
 @router.get("/analytics", response_model=AnalyticsSummary)
