@@ -18,6 +18,9 @@ type Step = {
   subject: string;
   body: string;
   template_id?: string;
+  variant_subject?: string;
+  variant_body?: string;
+  condition?: "always" | "opened" | "clicked" | "not_opened" | "not_clicked";
 };
 
 type RecipientList = { id: string; filename: string; row_count: number; columns: string[]; uploaded_at: string };
@@ -49,6 +52,7 @@ const emptyStep = (index: number): Step => ({
   template_name: index === 0 ? "Initial outreach" : `Follow-up ${index}`,
   subject: "",
   body: "",
+  condition: "always",
 });
 
 const stepLabels = ["Lead List", "Sequence", "Email Accounts", "SubSequences", "Settings"];
@@ -207,6 +211,7 @@ export default function TemplateBuilder() {
   const createMutation = useMutation({
     mutationFn: async () => {
       const templateIds: string[] = [];
+      const variantTemplateIds: string[][] = [];
       for (let index = 0; index < steps.length; index += 1) {
         try {
           const step = steps[index];
@@ -216,6 +221,12 @@ export default function TemplateBuilder() {
             body: step.body,
           });
           templateIds.push(template.id);
+          const variants: string[] = [];
+          if ((step.variant_subject || "").trim() || (step.variant_body || "").trim()) {
+            const variant = await apiPost<Template>("/workspace/templates", { name: `${step.template_name.trim()} · Variant B`, subject: (step.variant_subject || step.subject).trim(), body: step.variant_body || step.body });
+            variants.push(variant.id);
+          }
+          variantTemplateIds.push(variants);
         } catch (error) {
           throw new Error(`Could not save sequence step ${index + 1}: ${error instanceof Error ? error.message : "Unknown error"}`);
         }
@@ -231,6 +242,8 @@ export default function TemplateBuilder() {
             template_id: templateIds[index],
             label: step.label,
             delay_days: step.delay_days,
+            variant_template_ids: variantTemplateIds[index] || [],
+            condition: step.condition || "always",
           })),
           timezone,
           min_gap_minutes: minGapMinutes,
@@ -762,6 +775,11 @@ function SequenceStep(props: {
                   <Input type="number" min={1} value={selectedStep.delay_days} onChange={(e) => props.onUpdate(safeIndex, { delay_days: Number(e.target.value) })} className="mt-1" />
                 </label>
               )}
+              {safeIndex > 0 && (
+                <label className="text-xs font-semibold">Send this follow-up when
+                  <select value={selectedStep.condition || "always"} onChange={(e)=>props.onUpdate(safeIndex,{condition:e.target.value as Step["condition"]})} className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs"><option value="always">Always</option><option value="opened">Previous email was opened</option><option value="clicked">Previous email was clicked</option><option value="not_opened">Previous email was not opened</option><option value="not_clicked">Previous email was not clicked</option></select>
+                </label>
+              )}
             </div>
 
             <label className="mt-4 block text-xs font-semibold">Subject
@@ -782,6 +800,11 @@ function SequenceStep(props: {
               className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm leading-6 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
             />
             <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-400"><Braces size={12} /> Variables are replaced automatically before sending. Signature is added automatically.</p>
+            <div className="mt-5 rounded-lg border border-dashed border-blue-200 bg-blue-50/40 p-4">
+              <div><p className="text-xs font-semibold text-slate-800">A/B variant B <span className="font-normal text-slate-400">(optional)</span></p><p className="mt-1 text-[10px] text-slate-500">When provided, leads are deterministically split between the original and variant for this step.</p></div>
+              <label className="mt-3 block text-xs font-semibold">Variant subject<Input value={selectedStep.variant_subject || ""} onChange={(e)=>props.onUpdate(safeIndex,{variant_subject:e.target.value})} placeholder="Leave blank to use original subject" className="mt-1 bg-white"/></label>
+              <label className="mt-3 block text-xs font-semibold">Variant body<textarea value={selectedStep.variant_body || ""} onChange={(e)=>props.onUpdate(safeIndex,{variant_body:e.target.value})} placeholder="Leave blank to use original body" rows={8} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm leading-6 outline-none focus:border-blue-400"/></label>
+            </div>
           </div>
         </div>
       </div>
