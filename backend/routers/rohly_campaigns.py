@@ -570,6 +570,8 @@ async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest,
             campaign.get("sending_days", [0, 1, 2, 3, 4]), campaign.get("distribution_mode", "pattern"),
         )
         future = [event for event in rebuilt if (event.get("recipient_id"), event.get("step_index")) not in protected_keys]
+        if not future:
+            raise HTTPException(status_code=409, detail="No unsent emails remain to reactivate")
         await db.scheduled_emails.delete_many({
             "campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id,
             "status": {"$in": ["scheduled", "cancelled"]},
@@ -579,8 +581,6 @@ async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest,
         if future:
             await db.scheduled_emails.insert_many(future)
         first_at = min((event["scheduled_at"] for event in future), default=None)
-        if not future:
-            raise HTTPException(status_code=409, detail="No unsent emails remain to reactivate")
         await db.campaigns.update_one(
             {"id": campaign_id, "user_id": user.id},
             {"$set": {"status": "active", "next_send_at": first_at, "emails_scheduled": len(future), "reactivated_at": datetime.now(timezone.utc)}},
