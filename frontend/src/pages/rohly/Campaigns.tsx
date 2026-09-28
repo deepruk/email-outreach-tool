@@ -170,14 +170,14 @@ export default function Campaigns() {
               <table className="w-full min-w-[1050px] text-left">
                 <thead className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
                   <tr>
-                    <th className="w-10 px-4 py-4"><input type="checkbox" aria-label="Select all" checked={selected.length === filtered.length && filtered.length > 0} onChange={() => setSelected(selected.length === filtered.length ? [] : filtered.map((c) => c.id))} /></th>
+                    <th className="w-10 px-4 py-3"><input type="checkbox" aria-label="Select all" checked={selected.length === filtered.length && filtered.length > 0} onChange={() => setSelected(selected.length === filtered.length ? [] : filtered.map((c) => c.id))} /></th>
                     <th className="px-4 py-3">Campaign</th>
                     <th className="px-4 py-3">Leads</th>
                     <th className="px-4 py-3">Sent</th>
                     <th className="px-4 py-3">Replies</th>
                     <th className="px-4 py-3">Failed</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-4 text-right">Actions</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -186,7 +186,7 @@ export default function Campaigns() {
                     const progress = Math.min(100, Math.round((c.sent / planned) * 100));
                     return (
                       <tr key={`${c.isRohly ? "rohly" : "csv"}-${c.id}`} className="group text-xs transition-colors hover:bg-slate-50/80">
-                        <td className="px-4 py-4"><input type="checkbox" aria-label={`Select ${c.name}`} checked={selected.includes(c.id)} onChange={() => toggle(c.id)} /></td>
+                        <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${c.name}`} checked={selected.includes(c.id)} onChange={() => toggle(c.id)} /></td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-12"><div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-500"><span>{progress}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div></div>
@@ -196,12 +196,12 @@ export default function Campaigns() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-4 font-medium">{c.totalLeads}</td>
-                        <td className="px-4 py-4 font-medium">{c.sent}</td>
-                        <td className="px-4 py-4">{c.replies}</td>
-                        <td className="px-4 py-4 text-red-500">{c.failed}</td>
-                        <td className="px-4 py-4"><StatusBadge status={c.status} /></td>
-                        <td className="px-4 py-4 text-right">
+                        <td className="px-4 py-3 font-medium>{c.totalLeads}</td>
+                        <td className="px-4 py-3 font-medium>{c.sent}</td>
+                        <td className="px-4 py-3">{c.replies}</td>
+                        <td className="px-4 py-3 text-red-500>{c.failed}</td>
+                        <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
+                        <td className="px-4 py-3 text-right">
                           <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
                           {c.status !== "running" && (
                             <button onClick={() => { if (window.confirm(`Delete campaign "${c.name}"?`)) { (c.isRohly ? apiDelete<void>(`/workspace/rohly-campaigns/${c.id}`) : apiDelete<void>(`/csv/campaigns/${c.id}`)).then(() => { client.invalidateQueries({ queryKey: c.isRohly ? ["rohly-campaigns"] : ["csv-campaigns"] }); client.invalidateQueries({ queryKey: ["command-center"] }); }).catch(() => toast.error("Unable to delete campaign")); } }} className="ml-4 text-xs font-semibold text-red-600">
