@@ -176,3 +176,28 @@
   .rohly-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
   .rohly-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 }
+
+
+/* Rohly dark mode compatibility layer.
+   Existing screens still use Tailwind slate/white utilities, so these scoped
+   overrides make the whole product theme-aware while pages migrate to tokens. */
+.dark body { background: #080d1a; color: #e5e7eb; color-scheme: dark; }
+.dark .rohly-app-bg { background: #080d1a !important; color: #e5e7eb !important; }
+.dark .bg-white, .dark .bg-white\/95 { background-color: #111827 !important; }
+.dark .bg-slate-50, .dark .bg-slate-50\/70, .dark .bg-slate-50\/60 { background-color: #0f172a !important; }
+.dark .bg-slate-100 { background-color: #1e293b !important; }
+.dark .border-slate-100, .dark .border-slate-200, .dark .border-indigo-100, .dark .border-indigo-100\/80 { border-color: #263247 !important; }
+.dark .text-slate-950, .dark .text-slate-900, .dark .text-slate-800 { color: #f1f5f9 !important; }
+.dark .text-slate-700, .dark .text-slate-600 { color: #cbd5e1 !important; }
+.dark .text-slate-500, .dark .text-slate-400 { color: #94a3b8 !important; }
+.dark input, .dark textarea, .dark select { background-color: #0f172a; border-color: #334155; color: #e2e8f0; }
+.dark input::placeholder, .dark textarea::placeholder { color: #64748b; }
+.dark table thead { background-color: #0f172a !important; }
+.dark table tbody tr:hover { background-color: #162033 !important; }
+.dark .shadow-xl, .dark .shadow-2xl { --tw-shadow-color: rgb(0 0 0 / 0.45); }
+.dark [data-testid="desktop-sidebar"] { background: rgba(15, 23, 42, .97) !important; border-color: #263247 !important; }
+.dark [data-testid="desktop-sidebar"] .text-slate-600 { color: #aebbd0 !important; }
+.dark [data-testid="desktop-sidebar"] a:hover { background-color: rgba(99, 102, 241, .12) !important; }
+.dark [data-testid="desktop-sidebar"] .rohly-option-active { background: linear-gradient(90deg, rgba(79,70,229,.25), rgba(14,165,233,.12)) !important; color: #c7d2fe !important; }
+.dark [data-testid="command-palette"], .dark [data-testid="profile-menu"], .dark [data-testid="notifications-panel"], .dark [data-testid="help-panel"] { background-color: #111827 !important; border-color: #334155 !important; color: #e5e7eb !important; }
+.dark .rohly-scrollbar { scrollbar-color: #475569 transparent; }
