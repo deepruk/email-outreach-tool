@@ -9,11 +9,11 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "mobile:sync": "vite build && cap sync",
-    "mobile:android": "vite build && cap sync android && cap open android",
-    "mobile:ios": "vite build && cap sync ios && cap open ios",
-    "mobile:add:android": "cap add android",
-    "mobile:add:ios": "cap add ios --packagemanager SPM"
+    "mobile:sync": "npx -y @capacitor/cli@8.5.2 sync",
+    "mobile:android": "vite build && npx -y @capacitor/cli@8.5.2 sync android && npx -y @capacitor/cli@8.5.2 open android",
+    "mobile:ios": "vite build && npx -y @capacitor/cli@8.5.2 sync ios && npx -y @capacitor/cli@8.5.2 open ios",
+    "mobile:add:android": "npx -y @capacitor/cli@8.5.2 add android",
+    "mobile:add:ios": "npx -y @capacitor/cli@8.5.2 add ios --packagemanager SPM"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",
@@ -49,10 +49,7 @@
     "shadcn": "4.16.0",
     "sonner": "2.0.7",
     "tailwind-merge": "3.6.0",
-    "tw-animate-css": "1.4.0",
-    "@capacitor/core": "8.5.2",
-    "@capacitor/android": "8.5.2",
-    "@capacitor/ios": "8.5.2"
+    "tw-animate-css": "1.4.0"
   },
   "resolutions": {
     "react-is": "19.2.8"
@@ -73,7 +70,6 @@
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
     "vite": "7.3.2",
-    "vitest": "4.1.10",
-    "@capacitor/cli": "8.5.2"
+    "vitest": "4.1.10"
   }
 }
