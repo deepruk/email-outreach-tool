@@ -8,12 +8,7 @@
     "build": "rm -rf node_modules && yarn install --force --production=false --ignore-scripts && yarn vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
-    "mobile:sync": "npx -y @capacitor/cli@8.5.2 sync",
-    "mobile:android": "vite build && npx -y @capacitor/cli@8.5.2 sync android && npx -y @capacitor/cli@8.5.2 open android",
-    "mobile:ios": "vite build && npx -y @capacitor/cli@8.5.2 sync ios && npx -y @capacitor/cli@8.5.2 open ios",
-    "mobile:add:android": "npx -y @capacitor/cli@8.5.2 add android",
-    "mobile:add:ios": "npx -y @capacitor/cli@8.5.2 add ios --packagemanager SPM"
+    "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",
