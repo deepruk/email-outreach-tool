@@ -70,6 +70,11 @@ class CampaignCreate(BaseModel):
     webhook_events: list[str] = ["sent", "opened", "clicked", "replied", "bounced", "unsubscribed", "campaign_completed"]
 
 
+class SuppressionCreate(BaseModel):
+    email: str
+    reason: str = "manual"
+
+
 class CampaignFeatureUpdate(BaseModel):
     open_tracking: bool = True
     click_tracking: bool = False
@@ -193,6 +198,31 @@ def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict
                 event["scheduled_at"] = local_time.astimezone(timezone.utc)
             previous = event["scheduled_at"].astimezone(tz)
     return events
+
+
+@router.get("/suppressions")
+async def list_suppressions(user: UserPublic = Depends(require_user)) -> list[dict]:
+    rows = await db.suppressions.find({"user_id": user.id}).sort("updated_at", -1).to_list(5000)
+    for row in rows:
+        row.pop("_id", None)
+    return rows
+
+
+@router.post("/suppressions")
+async def add_suppression(input: SuppressionCreate, user: UserPublic = Depends(require_user)) -> dict:
+    email = input.email.strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=422, detail="Enter a valid email")
+    now = datetime.now(timezone.utc)
+    await db.suppressions.update_one({"user_id": user.id, "email": email}, {"$set": {"reason": input.reason, "updated_at": now}, "$setOnInsert": {"created_at": now}}, upsert=True)
+    await db.scheduled_emails.update_many({"user_id": user.id, "recipient_email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "status": "scheduled"}, {"$set": {"status": "cancelled", "error": "Lead is on the suppression list"}})
+    return {"email": email, "reason": input.reason, "updated_at": now}
+
+
+@router.delete("/suppressions/{email}", status_code=204)
+async def remove_suppression(email: str, user: UserPublic = Depends(require_user)):
+    await db.suppressions.delete_one({"user_id": user.id, "email": email.strip().lower()})
+    return None
 
 
 @router.get("/campaigns")
