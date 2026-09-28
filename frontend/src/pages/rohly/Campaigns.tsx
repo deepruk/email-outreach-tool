@@ -196,10 +196,10 @@ export default function Campaigns() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 font-medium>{c.totalLeads}</td>
-                        <td className="px-4 py-3 font-medium>{c.sent}</td>
+                        <td className="px-4 py-3 font-medium">{c.totalLeads}</td>
+                        <td className="px-4 py-3 font-medium">{c.sent}</td>
                         <td className="px-4 py-3">{c.replies}</td>
-                        <td className="px-4 py-3 text-red-500>{c.failed}</td>
+                        <td className="px-4 py-3 text-red-500">{c.failed}</td>
                         <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                         <td className="px-4 py-3 text-right">
                           <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
