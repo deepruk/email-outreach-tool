@@ -60,9 +60,12 @@ async def chart_for_days(days: int, user_id: str) -> list[ChartPoint]:
     return [ChartPoint(date=key, **value) for key, value in points.items()]
 
 
-def performance(row: dict) -> CampaignPerformance:
-    sent = int(row.get("emails_sent", row.get("sent_count", 0)))
-    replies = int(row.get("replies", 0))
+async def performance(row: dict, user_id: str) -> CampaignPerformance:
+    campaign_id = row["id"]
+    sent = await db.scheduled_emails.count_documents({"user_id": user_id, "campaign_id": campaign_id, "status": "sent"})
+    event_replies = len(await db.scheduled_emails.distinct("recipient_email", {"user_id": user_id, "campaign_id": campaign_id, "replied_at": {"$ne": None}}))
+    stored_replies = int(row.get("replies", 0))
+    replies = max(stored_replies, event_replies)
     total_steps = max(1, len(row.get("steps", [])))
     total_planned = max(1, int(row.get("total_leads", row.get("total_count", 0))) * total_steps)
     return CampaignPerformance(
@@ -113,7 +116,7 @@ async def dashboard(user: UserPublic = Depends(require_user)) -> CommandCenter:
         failed=failed,
         inboxes_needing_attention=attention,
         chart=await chart_for_days(14, user.id),
-        campaigns=[performance(row) for row in sorted(campaigns, key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)[:8]],
+        campaigns=[await performance(row, user.id) for row in sorted(campaigns, key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)[:8]],
     )
 
 
@@ -123,7 +126,7 @@ async def campaigns(user: UserPublic = Depends(require_user)) -> list[CampaignPe
     rohly_rows = await db.campaigns.find({"campaign_type": "rohly_template", "user_id": user.id}).sort("created_at", -1).to_list(1000)
     rows = csv_rows + rohly_rows
     rows.sort(key=lambda row: row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return [performance(row) for row in rows]
+    return [await performance(row, user.id) for row in rows]
 
 
 @router.get("/search", response_model=list[SearchResult])
@@ -331,7 +334,7 @@ async def analytics(days: int = Query(default=30, ge=7, le=365), user: UserPubli
         positive_reply_rate=round((positives / sent) * 100, 1) if sent else 0,
         bounce_rate=round((failed / (sent + failed)) * 100, 1) if sent + failed else 0,
         chart=await chart_for_days(min(days, 60), user.id),
-        campaign_comparison=[performance(row) for row in campaigns],
+        campaign_comparison=[await performance(row, user.id) for row in campaigns],
         inbox_performance=await inbox_health_rows(days, user.id),
     )
 
