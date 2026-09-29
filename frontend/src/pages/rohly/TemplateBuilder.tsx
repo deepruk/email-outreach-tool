@@ -699,13 +699,13 @@ function SequenceStep(props: {
         <Button variant="outline" onClick={props.onAdd} className="gap-2"><Plus size={14} /> Add Step</Button>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[250px_1fr]">
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="grid items-start gap-5 xl:grid-cols-[250px_minmax(0,1fr)]">
+        <div className="sticky top-[210px] max-h-[calc(100vh-230px)] overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
           <div className="flex items-center justify-between px-2 py-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Steps</span>
             <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold">{props.steps.length} {props.steps.length === 1 ? "step" : "steps"}</span>
           </div>
-          <div className="mt-2 max-h-[620px] space-y-2 overflow-y-auto pr-1">
+          <div className="mt-2 max-h-[calc(100vh-300px)] space-y-2 overflow-y-auto pr-1">
             {props.steps.map((step, index) => (
               <div key={index}>
                 <button
@@ -736,8 +736,9 @@ function SequenceStep(props: {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white">
+          <div className="sticky top-[210px] z-10 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+
             <div>
               <span className="text-[10px] text-slate-400">Inbox Preview</span>
               <span className="mx-2 text-[10px] text-slate-300">|</span>
