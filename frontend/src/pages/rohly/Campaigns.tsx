@@ -57,11 +57,19 @@ export default function Campaigns() {
     queryKey: ["rohly-campaigns"],
     queryFn: () => apiGet<any[]>("/workspace/rohly-campaigns/campaigns"),
   });
+  const livePerformance = useQuery({
+    queryKey: ["campaign-performance"],
+    queryFn: () => apiGet<any[]>("/product/campaigns"),
+  });
 
+  const performanceById = new Map((livePerformance.data ?? []).map((row) => [String(row.id), row]));
   const campaigns = [
     ...(csv.data ?? []).map((r) => normalize(r, false)),
     ...(rohly.data ?? []).map((r) => normalize(r, true)),
-  ].filter((r): r is CampaignRow => Boolean(r));
+  ].filter((r): r is CampaignRow => Boolean(r)).map((row) => {
+    const live = performanceById.get(row.id);
+    return live ? { ...row, sent: Number(live.sent ?? row.sent), replies: Number(live.replies ?? row.replies), positive: Number(live.positive_replies ?? row.positive) } : row;
+  });
 
   const filtered = campaigns
     .filter((c) =>
@@ -82,7 +90,7 @@ export default function Campaigns() {
     stopped: campaigns.filter((c) => ["stopped", "completed"].includes(c.status)).length,
   };
 
-  const loading = csv.isLoading || rohly.isLoading;
+  const loading = csv.isLoading || rohly.isLoading || livePerformance.isLoading;
   const failed = csv.isError && rohly.isError;
 
   const toggle = (id: string) =>
