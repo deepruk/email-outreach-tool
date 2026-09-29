@@ -127,7 +127,8 @@ function CampaignAnalytics({ campaign, events = [], compact = false }: { campaig
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const repliedLeads = new Set(events.filter((item) => item.replied_at).map((item) => item.recipient_email)).size;
   const replies = Math.max(campaign.replies ?? 0, repliedLeads);
-  const metrics=[["Delivered",sent],["Unique opens",c.unique_opens??0],["Open rate",rate(c.unique_opens??0)],["Unique clicks",c.unique_clicks??0],["Click rate",rate(c.unique_clicks??0)],["Replies",replies],["Reply rate",rate(replies)],["Positive replies",campaign.positive_replies??0],["Bounces",c.bounces??0],["Bounce rate",rate(c.bounces??0)],["Unsubscribed",c.unsubscribes??0],["Scheduled",campaign.emails_scheduled]];
+  const pendingScheduled = events.filter((item) => item.status === "scheduled").length;
+  const metrics=[["Delivered",sent],["Unique opens",c.unique_opens??0],["Open rate",rate(c.unique_opens??0)],["Unique clicks",c.unique_clicks??0],["Click rate",rate(c.unique_clicks??0)],["Replies",replies],["Reply rate",rate(replies)],["Positive replies",campaign.positive_replies??0],["Bounces",c.bounces??0],["Bounce rate",rate(c.bounces??0)],["Unsubscribed",c.unsubscribes??0],["Scheduled",pendingScheduled]];
   const drillable = new Set(["Delivered","Unique opens","Unique clicks","Replies","Bounces","Unsubscribed","Scheduled"]);
   const rowsFor = (label:string) => {
     const byLead = new Map<string, { key:string; email:string; name:string; company:string; at:string|null; detail:string; stepLabel:string; subject:string; body:string; sentAt:string|null }>();
