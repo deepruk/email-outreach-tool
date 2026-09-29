@@ -156,8 +156,11 @@ async def unsubscribe(tracking_id: str) -> Response:
     campaign, collection = await _campaign_for(row)
     await db.suppressions.update_one({"user_id": row.get("user_id"), "email": email}, {"$set": {"reason": "unsubscribed", "updated_at": now}, "$setOnInsert": {"created_at": now}}, upsert=True)
     await db.scheduled_emails.update_many({"user_id": row.get("user_id"), "recipient_email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "status": "scheduled"}, {"$set": {"status": "cancelled", "error": "Lead unsubscribed"}})
-    await db.scheduled_emails.update_one({"id": row["id"]}, {"$set": {"unsubscribed_at": now}})
-    if campaign:
+    first_unsubscribe = await db.scheduled_emails.update_one(
+        {"id": row["id"], "$or": [{"unsubscribed_at": {"$exists": False}}, {"unsubscribed_at": None}]},
+        {"$set": {"unsubscribed_at": now}},
+    )
+    if campaign and first_unsubscribe.modified_count == 1:
         await collection.update_one({"id": row["campaign_id"]}, {"$inc": {"unsubscribes": 1}})
         await emit_campaign_event(campaign, "unsubscribed", {"recipient_email": email})
     return Response("<!doctype html><html><body style='font-family:system-ui;padding:48px'><h2>You have been unsubscribed.</h2><p>You will not receive future outreach emails from this sender.</p></body></html>", media_type="text/html")
