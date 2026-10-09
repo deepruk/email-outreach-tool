@@ -199,8 +199,13 @@ export default function TemplateBuilder() {
       );
     },
     onSuccess: (result) => {
-      setTestPassed(true);
-      toast.success(`Test email sent to ${result.recipient_email} via ${result.inbox_email}`);
+      const verifiedRealSend = result.mode === "gmail";
+      setTestPassed(verifiedRealSend);
+      if (verifiedRealSend) {
+        toast.success(`Test email sent to ${result.recipient_email} via ${result.inbox_email}`);
+      } else {
+        toast.warning("This inbox is in mock mode. Connect a real Gmail inbox and send a real test email before launching.");
+      }
     },
     onError: (error) => {
       setTestPassed(false);
@@ -262,6 +267,8 @@ export default function TemplateBuilder() {
       try {
         await apiPost(`/workspace/rohly-campaigns/${created.id}/launch`, {});
       } catch (error) {
+        // A failed launch should not leave a queued campaign that looks launch-ready.
+        await apiDelete(`/workspace/rohly-campaigns/${created.id}`).catch(() => undefined);
         throw new Error(`Could not launch campaign: ${error instanceof Error ? error.message : "Unknown error"}`);
       }
       return created;
@@ -332,6 +339,11 @@ export default function TemplateBuilder() {
       if (!selectedRecipients.length) setActiveStep(0);
       else if (!steps.length || steps.some((step) => !step.subject.trim() || !step.body.trim())) setActiveStep(1);
       else if (!selectedInboxes.length) setActiveStep(2);
+      return;
+    }
+    if (!testPassed) {
+      toast.error("Send a successful test email from Settings before launching.");
+      setActiveStep(4);
       return;
     }
     createMutation.mutate();
