@@ -1,0 +1,54 @@
+name: Rohly launch checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-guardrails:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      MONGO_URL: mongodb://127.0.0.1:27017
+      DB_NAME: rohly_test
+      APP_URL: https://example.test
+      OWNER_EMAIL: test@example.com
+      OWNER_PASSWORD: test-password
+      OWNER_NAME: Test Owner
+      GOOGLE_CLIENT_ID: test-client-id
+      GOOGLE_CLIENT_SECRET: test-client-secret
+      GOOGLE_REDIRECT_URI: https://example.test/api/oauth/gmail/callback
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend test dependencies
+        run: pip install fastapi motor python-dotenv "pydantic>=2.6.4" email-validator google-api-python-client google-auth google-auth-oauthlib requests pytest pytest-asyncio httpx passlib bcrypt pyjwt
+      - name: Test Rohly scheduling, personalization, and daily limits
+        run: pytest -q tests/test_rohly_daily_limits.py
+
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install frontend dependencies
+        run: yarn install --immutable
+      - name: Typecheck frontend
+        run: yarn typecheck
