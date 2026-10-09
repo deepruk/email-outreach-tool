@@ -32,7 +32,7 @@ jobs:
       - name: Install backend test dependencies
         run: pip install fastapi motor python-dotenv "pydantic>=2.6.4" email-validator google-api-python-client google-auth google-auth-oauthlib requests pytest pytest-xdist pytest-asyncio httpx passlib 'bcrypt==4.0.1' pyjwt
       - name: Test Rohly scheduling, personalization, and daily limits
-        run: pytest -q tests/test_rohly_daily_limits.py
+        run: pytest -q tests/test_rohly_daily_limits.py tests/test_rohly_open_tracking.py
 
   frontend-typecheck:
     runs-on: ubuntu-latest
