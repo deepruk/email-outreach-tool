@@ -486,6 +486,65 @@ async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(requ
         raise HTTPException(status_code=500, detail=f"Could not create campaign: {type(exc).__name__}: {str(exc)[:400]}") from exc
 
 
+def _daily_limit_violations(events: list[dict], existing: list[dict], inboxes: list[dict], timezone_name: str) -> list[dict]:
+    """Return per-inbox/local-day daily-limit violations for a proposed schedule."""
+    tz = ZoneInfo(timezone_name)
+    limits = {row.get("id"): int(row.get("daily_sending_limit", 0) or 0) for row in inboxes}
+    labels = {row.get("id"): row.get("email", row.get("id", "inbox")) for row in inboxes}
+    counts: dict[tuple[str, object], int] = {}
+
+    def add(row: dict, *, proposed: bool = False) -> None:
+        inbox_id = row.get("inbox_id")
+        stamp = row.get("scheduled_at")
+        if not proposed and row.get("status") == "sent":
+            stamp = row.get("sent_at") or stamp
+        if not inbox_id or stamp is None:
+            return
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        key = (inbox_id, stamp.astimezone(tz).date())
+        counts[key] = counts.get(key, 0) + 1
+
+    for row in existing:
+        add(row)
+    for row in events:
+        add(row, proposed=True)
+
+    violations = []
+    for (inbox_id, local_day), count in counts.items():
+        limit = limits.get(inbox_id)
+        if limit is not None and limit > 0 and count > limit:
+            violations.append({
+                "inbox_id": inbox_id,
+                "inbox_email": labels.get(inbox_id, inbox_id),
+                "date": local_day.isoformat(),
+                "count": count,
+                "limit": limit,
+            })
+    return sorted(violations, key=lambda item: (item["date"], item["inbox_email"]))
+
+
+async def _validate_daily_limits(events: list[dict], campaign_id: str, user_id: str, inbox_ids: list[str], timezone_name: str) -> None:
+    inboxes = await db.inboxes.find({"id": {"$in": inbox_ids}, "user_id": user_id}).to_list(1000)
+    existing = await db.scheduled_emails.find({
+        "user_id": user_id,
+        "inbox_id": {"$in": inbox_ids},
+        "campaign_id": {"$ne": campaign_id},
+        "status": {"$in": ["scheduled", "sending", "sent"]},
+    }).to_list(100000)
+    violations = _daily_limit_violations(events, existing, inboxes, timezone_name)
+    if violations:
+        first = violations[0]
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Daily sending limit would be exceeded for {first['inbox_email']} on {first['date']} "
+                f"({first['count']} emails scheduled/sent; limit {first['limit']}). "
+                "Reduce the recipient list or connect/select more inboxes, then launch again."
+            ),
+        )
+
+
 @router.post("/{campaign_id}/launch")
 async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_user)) -> dict:
     campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
@@ -503,6 +562,8 @@ async def launch_campaign(campaign_id: str, user: UserPublic = Depends(require_u
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not schedule campaign: {str(exc)[:240]}") from exc
+
+    await _validate_daily_limits(events, campaign_id, user.id, campaign["inbox_ids"], campaign.get("timezone", "Asia/Kolkata"))
 
     await db.scheduled_emails.delete_many({"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id})
     if events:
