@@ -489,7 +489,7 @@ async def create_campaign(input: CampaignCreate, user: UserPublic = Depends(requ
 def _daily_limit_violations(events: list[dict], existing: list[dict], inboxes: list[dict], timezone_name: str) -> list[dict]:
     """Return per-inbox/local-day daily-limit violations for a proposed schedule."""
     tz = ZoneInfo(timezone_name)
-    limits = {row.get("id"): int(row.get("daily_sending_limit", 0) or 0) for row in inboxes}
+    limits = {row.get("id"): int(row.get("daily_sending_limit", 50) or 50) for row in inboxes}
     labels = {row.get("id"): row.get("email", row.get("id", "inbox")) for row in inboxes}
     counts: dict[tuple[str, object], int] = {}
 
