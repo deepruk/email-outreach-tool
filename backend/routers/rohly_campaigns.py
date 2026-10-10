@@ -60,7 +60,7 @@ class CampaignCreate(BaseModel):
     stop_on_reply: bool = True
     follow_up_priority: int = Field(default=100, ge=0, le=100)
     distribution_mode: str = "pattern"
-    open_tracking: bool = True
+    open_tracking: bool = False
     click_tracking: bool = False
     unsubscribe_enabled: bool = True
     stop_on_open: bool = False
@@ -76,7 +76,7 @@ class SuppressionCreate(BaseModel):
 
 
 class CampaignFeatureUpdate(BaseModel):
-    open_tracking: bool = True
+    open_tracking: bool = False
     click_tracking: bool = False
     unsubscribe_enabled: bool = True
     stop_on_reply: bool = True
@@ -266,7 +266,7 @@ class DraftCreate(BaseModel):
     stop_on_reply: bool = True
     follow_up_priority: int = 100
     distribution_mode: str = "pattern"
-    open_tracking: bool = True
+    open_tracking: bool = False
     click_tracking: bool = False
     unsubscribe_enabled: bool = True
     stop_on_open: bool = False
