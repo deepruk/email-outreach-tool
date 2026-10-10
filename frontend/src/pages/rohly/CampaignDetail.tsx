@@ -170,7 +170,7 @@ function ScheduleDialog({ campaign, onClose, onSaved }: { campaign: CsvCampaign;
 
 
 function GrowthSettings({ campaign, onSaved }: { campaign:any; onSaved:()=>void }) {
-  const [openTracking,setOpenTracking]=useState(campaign.open_tracking ?? true);
+  const [openTracking,setOpenTracking]=useState(campaign.open_tracking ?? false);
   const [clickTracking,setClickTracking]=useState(campaign.click_tracking ?? false);
   const [unsubscribe,setUnsubscribe]=useState(campaign.unsubscribe_enabled ?? true);
   const [stopReply,setStopReply]=useState(campaign.stop_on_reply ?? true);
