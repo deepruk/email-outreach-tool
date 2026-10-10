@@ -56,7 +56,7 @@ async def tracked_send_gmail_message(scheduled_email_id: str, inbox_id: str, rec
     if not scheduled:
         raise RuntimeError("Scheduled email was not found while preparing tracked send")
     campaign = await db.campaigns.find_one({"id": scheduled.get("campaign_id")}) or await db.csv_campaigns.find_one({"id": scheduled.get("campaign_id")}) or {}
-    open_tracking = bool(campaign.get("open_tracking", True))
+    open_tracking = bool(campaign.get("open_tracking", False))
     click_tracking = bool(campaign.get("click_tracking", False))
     unsubscribe = bool(campaign.get("unsubscribe_enabled", True))
     tracking_id = str(uuid.uuid4())
