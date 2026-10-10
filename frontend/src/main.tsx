@@ -9,7 +9,7 @@ import { queryClient } from './lib/queryClient'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem storageKey="rohly-theme">
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem storageKey="rohly-theme">
       <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <App />
