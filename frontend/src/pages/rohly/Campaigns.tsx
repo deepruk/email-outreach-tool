@@ -206,6 +206,7 @@ export default function Campaigns() {
                     <th className="px-4 py-3">Sent</th>
                     <th className="px-4 py-3">Replies</th>
                     <th className="px-4 py-3">Failed</th>
+                    <th className="px-4 py-3">Bounce rate</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
@@ -221,9 +222,9 @@ export default function Campaigns() {
                         <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${c.name}`} checked={selected.includes(c.id)} onChange={() => toggle(c.id)} /></td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-12"><div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-500"><span>{progress}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div></div>
+                            <div className="w-12"><div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-500"><span>{progress}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-orange-500" style={{ width: `${progress}%` }} /></div></div>
                             <div>
-                              <Link to={`/campaigns/${c.id}`} className="font-semibold text-slate-900 hover:text-blue-700">{c.name}</Link>
+                              <Link to={`/campaigns/${c.id}`} className="font-semibold text-slate-900 hover:text-orange-700">{c.name}</Link>
                               <div className="mt-1 text-[10px] text-slate-400">{c.source} · {c.steps.length} {c.steps.length === 1 ? "step" : "steps"}</div>
                             </div>
                           </div>
@@ -232,9 +233,10 @@ export default function Campaigns() {
                         <td className="px-4 py-3 font-medium">{c.sent}</td>
                         <td className="px-4 py-3">{c.replies}</td>
                         <td className="px-4 py-3 text-red-500">{c.failed}</td>
+                        <td className={`px-4 py-3 font-medium ${c.bounces > 0 ? "text-amber-700" : "text-slate-600"}`} title={`${c.bounces} bounced email(s)`}>{bounceRate}</td>
                         <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><Pencil size={12} /> Rename</button>
+                          <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-orange-700"><Pencil size={12} /> Rename</button>
                           <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
                           {c.status !== "running" && (
                             <button onClick={() => { if (window.confirm(`Delete campaign "${c.name}"?`)) { (c.isRohly ? apiDelete<void>(`/workspace/rohly-campaigns/${c.id}`) : apiDelete<void>(`/csv/campaigns/${c.id}`)).then(() => { client.invalidateQueries({ queryKey: c.isRohly ? ["rohly-campaigns"] : ["csv-campaigns"] }); client.invalidateQueries({ queryKey: ["command-center"] }); }).catch(() => toast.error("Unable to delete campaign")); } }} className="ml-4 text-xs font-semibold text-red-600">
