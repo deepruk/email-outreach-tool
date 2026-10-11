@@ -441,6 +441,7 @@ export default function TemplateBuilder() {
             listPickerOpen={listPickerOpen}
             setListPickerOpen={setListPickerOpen}
             onToggle={(id) => toggle(setSelectedRecipients, id)}
+            onToggleAll={(ids, checked) => setSelectedRecipients((current) => checked ? Array.from(new Set([...current, ...ids])) : current.filter((id) => !ids.includes(id)))}
             onRemoveList={removeRecipientList}
             onUploadFile={handleCsvUpload}
             onUseList={(id) => useListMutation.mutate(id)}
@@ -561,6 +562,7 @@ function LeadListStep(props: {
   listPickerOpen: boolean;
   setListPickerOpen: (value: boolean) => void;
   onToggle: (id: string) => void;
+  onToggleAll: (ids: string[], checked: boolean) => void;
   onRemoveList: (id: string) => void;
   onUploadFile: (file: File) => void;
   onUseList: (id: string) => void;
@@ -668,7 +670,7 @@ function LeadListStep(props: {
               <table className="w-full min-w-[1050px] text-left">
                 <thead className="bg-slate-50 text-[10px] font-semibold text-slate-500">
                   <tr>
-                    <th className="w-10 px-4 py-3"><input type="checkbox" checked={leads.length > 0 && leads.every((r) => props.selectedRecipients.includes(r.id))} readOnly className="size-3.5 accent-violet-600" /></th>
+                    <th className="w-10 px-4 py-3"><input type="checkbox" aria-label="Select all visible leads" checked={leads.length > 0 && leads.every((r) => props.selectedRecipients.includes(r.id))} onChange={(event) => props.onToggleAll(leads.map((lead) => lead.id), event.target.checked)} className="size-3.5 accent-violet-600" /></th>
                     <th className="px-3 py-3">Lead Info</th>
                     <th className="px-3 py-3">Last Message</th>
                     <th className="px-3 py-3">Reply Details</th>
