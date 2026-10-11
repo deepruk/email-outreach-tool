@@ -146,7 +146,7 @@ export default function Campaigns() {
         <table className="w-full min-w-[960px] text-left">
           <thead className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
             <tr>
-              <th className="w-10 px-4 py-3"><input type="checkbox" aria-label="Select all visible campaigns" checked={filtered.length > 0 && filtered.every((c) => selected.includes(c.id))} onChange={() => setSelected(filtered.every((c) => selected.includes(c.id)) ? selected.filter((id) => !filtered.some((c) => c.id === id)) : [...new Set([...selected, ...filtered.map((c) => c.id)])]} className="rounded border-slate-300 accent-orange-500"/></th>
+              <th className="w-10 px-4 py-3"><input type="checkbox" aria-label="Select all visible campaigns" checked={filtered.length > 0 && filtered.every((c) => selected.includes(c.id))} onChange={() => setSelected(filtered.every((c) => selected.includes(c.id)) ? selected.filter((id) => !filtered.some((c) => c.id === id)) : [...new Set([...selected, ...filtered.map((c) => c.id)])])} className="rounded border-slate-300 accent-orange-500"/></th>
               <th className="px-4 py-3">Campaign</th><th className="px-4 py-3">Leads</th><th className="px-4 py-3">Sent</th><th className="px-4 py-3">Replies</th><th className="px-4 py-3">Failed</th><th className="px-4 py-3">Bounce rate</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
