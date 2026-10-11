@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { RequireAuth } from "@/components/rohly/AppShell";
 import Login from "@/pages/Login";
+import Landing from "@/pages/Landing";
 import Signup from "@/pages/Signup";
 import VerifyEmail from "@/pages/VerifyEmail";
 import Dashboard from "@/pages/rohly/Dashboard";
@@ -21,11 +22,12 @@ import CampaignEditor from "@/pages/rohly/CampaignEditor";
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route element={<RequireAuth />}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/app" element={<Dashboard />} />
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/campaigns/new" element={<TemplateBuilder />} />
         <Route path="/campaigns/new/template" element={<TemplateBuilder />} />
