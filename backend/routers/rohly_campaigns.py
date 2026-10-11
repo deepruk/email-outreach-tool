@@ -19,6 +19,7 @@ router = APIRouter(prefix="/workspace/rohly-campaigns", tags=["rohly-campaigns"]
 
 
 class Step(BaseModel):
+    step_index: int | None = Field(default=None, ge=0)
     template_id: str
     label: str = "Initial email"
     delay_days: int = Field(default=0, ge=0, le=365)
@@ -150,8 +151,9 @@ def _schedule_events(campaign_id: str, campaign_name: str, recipients: list[dict
         first = _working(first, days, start, end)
         next_initial[inbox_id] = first
         prior = first
-        for step_index, step in enumerate(steps):
-            scheduled = first if step_index == 0 else _working(prior + timedelta(days=int(step.get("delay_days", 1))), days, start, end)
+        for position, step in enumerate(steps):
+            step_index = step.get("step_index") if step.get("step_index") is not None else position
+            scheduled = first if position == 0 else _working(prior + timedelta(days=int(step.get("delay_days", 1))), days, start, end)
             events.append({
                 "id": uuid.uuid4().hex,
                 "campaign_id": campaign_id,
@@ -630,6 +632,8 @@ async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest,
         raise HTTPException(status_code=422, detail="Status must be active, paused, or stopped")
     if campaign.get("status") == "completed":
         raise HTTPException(status_code=409, detail="Completed campaigns cannot be resumed")
+    if campaign.get("edit_lock"):
+        raise HTTPException(status_code=409, detail="Campaign changes are being saved. Try again shortly.")
     # Reactivating a stopped campaign must rebuild only the remaining unsent
     # recipient/step pairs. Stop intentionally cancels future rows, so merely
     # changing the status back to active would leave nothing to send.
@@ -680,6 +684,8 @@ async def update_campaign_schedule(campaign_id: str, input: CampaignScheduleUpda
     campaign = await db.campaigns.find_one({"id": campaign_id, "campaign_type": "rohly_template", "user_id": user.id})
     if not campaign:
         raise HTTPException(status_code=404, detail="Rohly campaign not found")
+    if campaign.get("edit_lock"):
+        raise HTTPException(status_code=409, detail="Campaign changes are being saved. Try again shortly.")
     if campaign.get("status") in {"stopped", "completed"}:
         raise HTTPException(status_code=409, detail="Stopped or completed campaigns cannot be rescheduled")
     if input.min_gap_minutes > input.max_gap_minutes:
@@ -724,6 +730,102 @@ async def update_campaign_schedule(campaign_id: str, input: CampaignScheduleUpda
     next_campaign.update(updates)
     next_campaign.pop("_id", None)
     return next_campaign
+
+
+class CampaignEdit(BaseModel):
+    name: str = Field(min_length=1)
+    inbox_ids: list[str] = Field(min_length=1)
+    recipient_ids: list[str] = Field(min_length=1)
+    steps: list[Step] = Field(min_length=1, max_length=10)
+
+
+def _edit_steps(existing: list[dict], proposed: list[dict], minimum_next: int = 0) -> list[dict]:
+    indices = {step.get("step_index") if step.get("step_index") is not None else index for index, step in enumerate(existing)}
+    next_index = max(max(indices, default=-1) + 1, minimum_next)
+    used = set()
+    result = []
+    for step in proposed:
+        index = step.get("step_index")
+        if index is None:
+            index = next_index
+            next_index += 1
+        elif index not in indices:
+            raise HTTPException(status_code=422, detail="Unknown sequence step")
+        if index in used:
+            raise HTTPException(status_code=422, detail="Duplicate sequence step")
+        used.add(index)
+        result.append({**step, "step_index": index})
+    return result
+
+
+def _edit_remaining(events: list[dict], history: list[dict], stop_on_reply: bool) -> list[dict]:
+    protected = {(row.get("recipient_id"), row.get("step_index")) for row in history}
+    replied = {row.get("recipient_id") for row in history if row.get("replied_at")}
+    return [event for event in events if (event.get("recipient_id"), event.get("step_index")) not in protected and not (stop_on_reply and event.get("recipient_id") in replied)]
+
+
+@router.put("/{campaign_id}")
+async def edit_campaign(campaign_id: str, input: CampaignEdit, user: UserPublic = Depends(require_user)) -> dict:
+    scope = {"id": campaign_id, "user_id": user.id, "campaign_type": "rohly_template"}
+    campaign = await db.campaigns.find_one(scope)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if campaign.get("status") not in {"paused", "queued", "stopped"}:
+        raise HTTPException(status_code=409, detail="Pause the campaign before editing leads, accounts, or sequences")
+    lock = await db.campaigns.update_one({**scope, "status": campaign["status"], "edit_lock": {"$ne": True}}, {"$set": {"edit_lock": True}})
+    if not lock.modified_count:
+        raise HTTPException(status_code=409, detail="Campaign is busy. Reload and try again")
+    event_scope = {"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id}
+    new_ids = []
+    updates = {}
+    try:
+        if await db.scheduled_emails.find_one({**event_scope, "status": "sending"}):
+            raise HTTPException(status_code=409, detail="An email is finishing sending. Try again shortly")
+        inbox_ids = list(dict.fromkeys(input.inbox_ids))
+        recipient_ids = list(dict.fromkeys(input.recipient_ids))
+        inboxes = await db.inboxes.find({"id": {"$in": inbox_ids}, "user_id": user.id, "status": "connected"}).to_list(1000)
+        recipients = await db.recipients.find({"id": {"$in": recipient_ids}, "user_id": user.id}).to_list(5000)
+        if len(inboxes) != len(inbox_ids) or len(recipients) != len(recipient_ids):
+            raise HTTPException(status_code=422, detail="Select available connected accounts and leads from your workspace")
+        steps = _edit_steps(campaign["steps"], [step.model_dump() for step in input.steps], campaign.get("next_step_index", 0))
+        template_ids = {value for step in steps for value in [step["template_id"], *step.get("variant_template_ids", [])]}
+        templates = await db.templates.find({"id": {"$in": list(template_ids)}, "user_id": user.id}).to_list(1000)
+        if len(templates) != len(template_ids):
+            raise HTTPException(status_code=422, detail="One or more sequence templates are unavailable")
+        if not input.name.strip():
+            raise HTTPException(status_code=422, detail="Campaign name cannot be empty")
+        history = await db.scheduled_emails.find({**event_scope, "$or": [{"status": {"$in": ["sent", "failed", "sending"]}}, {"replied_at": {"$ne": None}}]}).to_list(100000)
+        future = []
+        if campaign.get("launched_at"):
+            rebuilt = _schedule_events(campaign_id, input.name.strip(), recipients, inbox_ids, steps, campaign.get("timezone", "Asia/Kolkata"), campaign["min_gap_minutes"], campaign["max_gap_minutes"], campaign.get("sending_window_start", "09:00"), campaign.get("sending_window_end", "18:00"), campaign.get("sending_days", [0,1,2,3,4]), campaign.get("distribution_mode", "pattern"))
+            future = _edit_remaining(rebuilt, history, campaign.get("stop_on_reply", True))
+            existing = await db.scheduled_emails.find({"user_id": user.id, "inbox_id": {"$in": inbox_ids}, "status": {"$in": ["sent", "sending", "scheduled"]}, "$or": [{"campaign_id": {"$ne": campaign_id}}, {"status": {"$in": ["sent", "sending"]}}]}).to_list(100000)
+            if _daily_limit_violations(future, existing, inboxes, campaign.get("timezone", "Asia/Kolkata")):
+                raise HTTPException(status_code=422, detail="This edit would exceed mailbox daily limits. Select more inboxes or adjust the schedule")
+        old = await db.scheduled_emails.find({**event_scope, "status": {"$in": ["scheduled", "cancelled"]}, "replied_at": None}).to_list(100000)
+        for event in future:
+            event["user_id"] = user.id
+            if campaign["status"] == "stopped":
+                event["status"] = "cancelled"
+            new_ids.append(event["id"])
+        updates = {"next_step_index": max([campaign.get("next_step_index", 0) - 1] + [step.get("step_index") if step.get("step_index") is not None else index for index, step in enumerate(campaign["steps"])] + [step["step_index"] for step in steps]) + 1, "name": input.name.strip(), "inbox_ids": inbox_ids, "inbox_id": inbox_ids[0], "recipient_ids": recipient_ids, "steps": steps, "template_id": steps[0]["template_id"], "total_count": len(recipient_ids), "emails_scheduled": len(future) if campaign["status"] != "stopped" else 0, "next_send_at": min((row["scheduled_at"] for row in future), default=None)}
+        if future:
+            await db.scheduled_emails.insert_many(future)
+        await db.campaigns.update_one(scope, {"$set": updates})
+        if old:
+            await db.scheduled_emails.delete_many({**event_scope, "id": {"$in": [row["id"] for row in old]}})
+        result = {**campaign, **updates}
+        result.pop("_id", None)
+        result.pop("edit_lock", None)
+        return result
+    except Exception:
+        if new_ids:
+            await db.scheduled_emails.delete_many({**event_scope, "id": {"$in": new_ids}})
+        if updates:
+            await db.campaigns.update_one(scope, {"$set": {key: campaign[key] for key in updates if key in campaign}, "$unset": {key: "" for key in updates if key not in campaign}})
+        raise
+    finally:
+        await db.campaigns.update_one(scope, {"$unset": {"edit_lock": ""}})
 
 
 @router.get("/{campaign_id}/activity")
