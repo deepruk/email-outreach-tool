@@ -203,6 +203,9 @@ async def inbox_health_rows(days: int = 7, user_id: str | None = None) -> list[I
     for inbox in inboxes:
         sent = await db.scheduled_emails.count_documents({"user_id": user_id, "inbox_id": inbox.id, "status": "sent", "sent_at": {"$gte": today}})
         failed = await db.scheduled_emails.count_documents({"user_id": user_id, "inbox_id": inbox.id, "status": "failed", "scheduled_at": {"$gte": week}})
+        delivered = await db.scheduled_emails.count_documents({"user_id": user_id, "inbox_id": inbox.id, "status": "sent", "sent_at": {"$gte": week}})
+        bounced = await db.scheduled_emails.count_documents({"user_id": user_id, "inbox_id": inbox.id, "bounced_at": {"$gte": week}})
+        replies = await db.replies.count_documents({"user_id": user_id, "inbox_id": inbox.id, "received_at": {"$gte": week}})
         last = await db.scheduled_emails.find_one({"user_id": user_id, "inbox_id": inbox.id}, sort=[("scheduled_at", -1)])
         utilization = round((sent / inbox.daily_sending_limit) * 100, 1)
         disconnected = inbox.status != "connected"
@@ -220,6 +223,9 @@ async def inbox_health_rows(days: int = 7, user_id: str | None = None) -> list[I
             health_score=score,
             health="disconnected" if disconnected else "attention" if attention else "healthy",
             failed_last_7_days=failed,
+            bounce_rate=round(bounced / (delivered + bounced) * 100, 1) if delivered + bounced else None,
+            reply_rate=round(replies / delivered * 100, 1) if delivered else None,
+
             last_activity=aware(last.get("sent_at") or last.get("scheduled_at")) if last else None,
         ))
     return rows
