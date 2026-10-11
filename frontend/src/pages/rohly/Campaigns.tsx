@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Check, Clock3, Layers3, Mail, MessageSquareReply, Pencil, Plus, RefreshCw, Search, Send, ShieldCheck, Trash2, Users } from "lucide-react";
+import { ArrowUpRight, Clock3, Layers3, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
-import type { CommandCenter } from "@/lib/types";
-import { CampaignActivity } from "@/components/rohly/CampaignActivity";
 import "@/components/rohly/campaigns.css";
 import { StatusBadge } from "@/components/rohly/StatusBadge";
 
@@ -70,13 +68,8 @@ export default function Campaigns() {
     queryFn: () => apiGet<any[]>("/product/campaigns"),
   });
 
-  const activity = useQuery({
-    queryKey: ["command-center"],
-    queryFn: () => apiGet<CommandCenter>("/product/dashboard"),
-    refetchInterval: 30000,
-  });
-  const refreshing = csv.isFetching || rohly.isFetching || livePerformance.isFetching || activity.isFetching;
-  const refresh = () => { void Promise.all([csv.refetch(), rohly.refetch(), livePerformance.refetch(), activity.refetch()]); };
+  const refreshing = csv.isFetching || rohly.isFetching || livePerformance.isFetching;
+  const refresh = () => { void Promise.all([csv.refetch(), rohly.refetch(), livePerformance.refetch()]); };
   const performanceById = new Map((livePerformance.data ?? []).map((row) => [String(row.id), row]));
   const campaigns = [
     ...(csv.data ?? []).map((r) => normalize(r, false)),
@@ -157,19 +150,12 @@ export default function Campaigns() {
     }
   };
 
-  const totals = campaigns.reduce((sum, row) => ({ leads: sum.leads + row.totalLeads, sent: sum.sent + row.sent, replies: sum.replies + row.replies }), { leads: 0, sent: 0, replies: 0 });
-  const metrics = [
-    { label: "Active campaigns", value: counts.running, note: `${counts.all} campaigns in your workspace`, icon: Send, tone: "blue" },
-    { label: "Total leads", value: totals.leads, note: "Across all campaigns", icon: Users, tone: "violet" },
-    { label: "Emails sent", value: totals.sent, note: "All-time campaign sends", icon: Mail, tone: "blue" },
-    { label: "Replies received", value: totals.replies, note: totals.sent ? `${(totals.replies / totals.sent * 100).toFixed(1)}% reply rate` : "Reply rate appears after sending", icon: MessageSquareReply, tone: "green" },
-  ];
   return (
     <div data-testid="campaigns-page" className="rohly-campaigns min-h-[calc(100vh-8rem)]">
       <PageHeader
         eyebrow="OUTREACH WORKSPACE"
         title="Campaigns"
-        description="Turn thoughtful outreach into your next conversation."
+        description="Create, organize, and manage your outreach campaigns."
         actions={
           <div className="cp-head-actions"><button onClick={refresh} className="cp-refresh" disabled={refreshing} aria-label="Refresh campaign data"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} /> Refresh</button><Button onClick={() => { window.location.href = "/campaigns/new"; }} className="cp-create h-10 gap-2 rounded-lg bg-blue-700 px-4 shadow-sm hover:bg-blue-800">
             <Plus size={14} /> New campaign
@@ -178,19 +164,7 @@ export default function Campaigns() {
       />
 
       {!failed && (csv.isError || rohly.isError || livePerformance.isError) ? <div className="cp-data-notice" role="status">Some campaign data could not refresh. <button onClick={refresh}>Try again</button></div> : null}
-      <div className="cp-metrics" aria-busy={loading}>
-        {metrics.map(({ label, value, note, icon: Icon, tone }) => <section key={label} className="cp-glass cp-metric"><div className="cp-metric-top"><span>{label}</span><span className={`cp-icon cp-${tone}`}><Icon size={16} /></span></div><strong>{loading ? "—" : failed ? "Unavailable" : value.toLocaleString()}</strong><p>{loading ? "Loading campaign data…" : failed ? "Try refreshing your data" : note}</p></section>)}
-      </div>
-      <div className="cp-overview">
-        <CampaignActivity data={activity.data?.chart} isLoading={activity.isLoading} isError={activity.isError} refreshing={activity.isFetching} updatedAt={activity.dataUpdatedAt} onRetry={() => { void activity.refetch(); }} />
-        <section className="cp-glass cp-tools"><div className="cp-section-heading"><span className="cp-eyebrow">YOUR WORKFLOW</span><h2>Built for better outreach</h2><p>Everything you need to keep moving.</p></div>
-          <Link to="/campaigns/new" className="cp-tool"><span className="cp-icon cp-violet"><Layers3 size={17} /></span><span><strong>Personalized sequences</strong><small>Create campaigns and follow-ups.</small></span><ArrowUpRight size={14} /></Link>
-          <Link to="/inboxes" className="cp-tool"><span className="cp-icon cp-blue"><ShieldCheck size={17} /></span><span><strong>Sending infrastructure</strong><small>Manage inboxes, limits, and health.</small></span><ArrowUpRight size={14} /></Link>
-          <Link to="/inbox" className="cp-tool"><span className="cp-icon cp-green"><MessageSquareReply size={17} /></span><span><strong>One place for replies</strong><small>Keep conversations in Master Inbox.</small></span><ArrowUpRight size={14} /></Link>
-          <div className="cp-workflow-note"><Check size={13} /><span>Your campaigns. Your schedule. Your control.</span></div>
-        </section>
-      </div>
-      <section className="cp-library"><div className="cp-library-heading"><div><span className="cp-eyebrow">CAMPAIGN LIBRARY</span><h2>All your outreach, organized.</h2></div><span className="cp-count"><Layers3 size={13} />{loading ? "Loading…" : `${counts.all} campaigns`}</span></div>
+      <section className="cp-library"><div className="cp-library-heading"><div><span className="cp-eyebrow">CAMPAIGN LIBRARY</span><h2>Your campaigns</h2></div><span className="cp-count"><Layers3 size={13} />{loading ? "Loading…" : `${counts.all} campaigns`}</span></div>
       <div className="cp-tabs">
         <div className="flex items-center gap-2 overflow-x-auto">
           {([
