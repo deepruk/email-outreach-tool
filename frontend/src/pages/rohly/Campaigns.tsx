@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Clock3, Layers3, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ArrowUpRight, Clock3, Layers3, Pause, Play, Square, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -218,7 +218,7 @@ export default function Campaigns() {
                     <th className="px-4 py-3">Sent</th>
                     <th className="px-4 py-3">Opened</th><th className="px-4 py-3">Replied</th><th className="px-4 py-3">Positive</th>
                     <th className="px-4 py-3">Failed</th>
-                    <th className="px-4 py-3">Status</th>
+                    
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -231,18 +231,18 @@ export default function Campaigns() {
                         <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${c.name}`} checked={selected.includes(c.id)} onChange={() => toggle(c.id)} /></td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-12"><div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-500"><span>{progress}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div></div>
+                            <div className={`ref-campaign-ring ${c.status}`} style={{ background: `conic-gradient(var(--ring-color) ${progress}%, var(--ref-line) 0)` }} title={`${progress}% sent`}><span>{c.status === "running" ? <Play size={13} /> : c.status === "paused" ? <Pause size={13} /> : <Square size={11} />}</span></div>
                             <div>
-                              <Link to={`/campaigns/${c.id}`} className="font-semibold text-slate-900 hover:text-blue-700">{c.name}</Link>
+                              <div className="flex items-center gap-2"><Link to={`/campaigns/${c.id}`} className="font-semibold text-slate-900 hover:text-blue-700">{c.name}</Link><StatusBadge status={c.status} /></div>
                               <div className="mt-1 text-[10px] text-slate-400">{c.steps.length} sequences · Created {new Date(c.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 font-medium">{c.totalLeads}</td>
-                        <td className="px-4 py-3 font-medium">{c.sent}</td>
+                        <td className="px-4 py-3 font-medium ref-sent">{c.sent}</td>
                         <td className="px-4 py-3 ref-opened">{c.opens ?? "—"}</td><td className="px-4 py-3"><span className="cp-replies">{c.replies}</span></td><td className="px-4 py-3 ref-positive">{c.positive}</td>
                         <td className="px-4 py-3 text-red-500">{c.failed}</td>
-                        <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
+                        
                         <td className="px-4 py-3 text-right">
                           <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><Pencil size={12} /> Rename</button>
                           <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
