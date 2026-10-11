@@ -115,6 +115,8 @@ class InboxHealth(BaseModel):
     utilization: float
     health_score: int
     health: Literal["healthy", "attention", "disconnected"]
+    bounce_rate: float | None = None
+    reply_rate: float | None = None
     failed_last_7_days: int
     last_activity: datetime | None = None
 
