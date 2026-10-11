@@ -219,3 +219,14 @@
 .dark .border-amber-200 { border-color: rgba(245, 158, 11, .42) !important; }
 .dark [data-testid="master-inbox-page"] { background: #0b1220 !important; }
 .dark [data-testid="master-inbox-page"] button { color: inherit; }
+
+
+/* Public Rohly marketing landing page: dark grid, warm orange glow, cool telemetry accents. */
+.rohly-landing {
+  background-color: #080b11;
+  background-image: linear-gradient(rgba(74, 89, 112, .12) 1px, transparent 1px), linear-gradient(90deg, rgba(74, 89, 112, .12) 1px, transparent 1px), radial-gradient(ellipse at 29% 19%, rgba(154, 55, 19, .22), transparent 39%), radial-gradient(ellipse at 79% 47%, rgba(16, 54, 72, .13), transparent 38%);
+  background-size: 52px 52px, 52px 52px, auto, auto;
+  font-family: 'Geist Variable', sans-serif;
+}
+.rohly-landing h1, .rohly-landing h2, .rohly-landing h3 { font-family: 'Outfit Variable', sans-serif; }
+.rohly-landing ::selection { background: rgba(249, 91, 29, .4); color: white; }
