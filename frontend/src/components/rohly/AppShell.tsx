@@ -7,7 +7,6 @@ import {
   Bell,
   CircleHelp,
   CreditCard,
-  FileSpreadsheet,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -17,7 +16,6 @@ import {
   Search,
   Send,
   Settings,
-  ShieldCheck,
   Sun,
   User,
   Users,
@@ -36,9 +34,7 @@ const nav = [
   { to: "/leads", label: "Leads", icon: Users },
   { to: "/inbox", label: "Master Inbox", icon: Inbox },
   { to: "/inboxes", label: "Inboxes", icon: Mail },
-  { to: "/warm-up", label: "Inbox Health", icon: ShieldCheck },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/imports", label: "CSV Imports", icon: FileSpreadsheet },
   { to: "/billing", label: "Billing", icon: CreditCard },
 ];
 
@@ -94,7 +90,7 @@ function AppShell({ user }: { user: UserPublic }) {
     const unread = (replies ?? []).filter((reply:any) => !reply.read);
     if (unread.length) items.push({ id:"unread-replies", title:`${unread.length} unread repl${unread.length===1?"y":"ies"}`, description:"New lead replies are waiting in Master Inbox.", href:"/inbox", tone:"blue" });
     if (Number(dashboard?.failed ?? 0) > 0) items.push({ id:"failed", title:`${dashboard.failed} failed deliver${Number(dashboard.failed)===1?"y":"ies"}`, description:"Review campaign delivery failures.", href:"/campaigns", tone:"red" });
-    if (Number(dashboard?.inboxes_needing_attention ?? 0) > 0) items.push({ id:"inbox-health", title:`${dashboard.inboxes_needing_attention} inbox${Number(dashboard.inboxes_needing_attention)===1?"":"es"} need attention`, description:"Review connected inbox health and sending status.", href:"/warm-up", tone:"amber" });
+    if (Number(dashboard?.inboxes_needing_attention ?? 0) > 0) items.push({ id:"inbox-health", title:`${dashboard.inboxes_needing_attention} inbox${Number(dashboard.inboxes_needing_attention)===1?"":"es"} need attention`, description:"Review connected inbox health and sending status.", href:"/inboxes#inbox-health", tone:"amber" });
     if (Number(dashboard?.scheduled ?? 0) > 0) items.push({ id:"scheduled", title:`${dashboard.scheduled} email${Number(dashboard.scheduled)===1?"":"s"} scheduled`, description:"Upcoming campaign sends are queued.", href:"/campaigns", tone:"blue" });
     return items;
   }, refetchInterval: 60000 });
