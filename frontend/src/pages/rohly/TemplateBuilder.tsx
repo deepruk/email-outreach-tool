@@ -83,6 +83,8 @@ export default function TemplateBuilder() {
   const [followUpPriority, setFollowUpPriority] = useState(100);
   const [distributionMode, setDistributionMode] = useState<"pattern" | "random">("pattern");
   const [draftId, setDraftId] = useState<string | null>(searchParams.get("draft"));
+  const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
+  const [uploadStage, setUploadStage] = useState<"uploading" | "importing" | null>(null);
   const [draftReady, setDraftReady] = useState(!searchParams.get("draft"));
   const hydratedDraft = useRef(false);
 
@@ -169,6 +171,7 @@ export default function TemplateBuilder() {
         : `${result.count} contacts added from ${result.filename}`);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add this list"),
+    onSettled: () => { setUploadingFileName(null); setUploadStage(null); },
   });
 
   const uploadMutation = useMutation({
@@ -178,11 +181,34 @@ export default function TemplateBuilder() {
       return apiUpload<CsvSource>("/csv/sources", form);
     },
     onSuccess: (result) => {
-      // Upload creates the CSV source; import its leads into this campaign before showing success.
+      // Upload creates exactly one source. Keep the UI in an importing state until its contacts are ready.
+      setUploadStage("importing");
       useListMutation.mutate(result.id);
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not upload this CSV"),
+    onError: (error) => {
+      setUploadingFileName(null);
+      setUploadStage(null);
+      toast.error(error instanceof Error ? error.message : "Could not upload this CSV");
+    },
   });
+
+  const handleCsvUpload = (file: File) => {
+    if (uploadMutation.isPending || useListMutation.isPending) {
+      toast.warning("Please wait for the current CSV import to finish.");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".csv") && file.type !== "text/csv") {
+      toast.error("Choose a CSV file to import.");
+      return;
+    }
+    if (file.size === 0) {
+      toast.error("This CSV file is empty.");
+      return;
+    }
+    setUploadingFileName(file.name);
+    setUploadStage("uploading");
+    uploadMutation.mutate(file);
+  };
 
   const testMutation = useMutation({
     mutationFn: async () => {
@@ -394,6 +420,18 @@ export default function TemplateBuilder() {
       </div>
 
       <div className="mx-auto max-w-[1500px] p-4 lg:p-5">
+        {uploadingFileName && uploadStage && (
+          <div role="status" aria-live="polite" className="mb-4 flex items-center gap-3 rounded-xl border border-indigo-100 bg-white px-4 py-3 shadow-sm" data-testid="csv-import-progress">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+              {uploadStage === "uploading" ? <Upload size={16} className="animate-pulse" /> : <RefreshCw size={16} className="animate-spin" />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-slate-800">{uploadingFileName}</p>
+              <p className="mt-1 text-[11px] text-slate-500">{uploadStage === "uploading" ? "Uploading this CSV…" : "Processing rows and adding contacts to this campaign…"}</p>
+            </div>
+            <span className="text-[10px] font-semibold text-indigo-600">{uploadStage === "uploading" ? "Uploading" : "Importing"}</span>
+          </div>
+        )}
         {activeStep === 0 && (
           <LeadListStep
             recipients={recipients}
@@ -404,7 +442,7 @@ export default function TemplateBuilder() {
             setListPickerOpen={setListPickerOpen}
             onToggle={(id) => toggle(setSelectedRecipients, id)}
             onRemoveList={removeRecipientList}
-            onUploadFile={(file) => uploadMutation.mutate(file)}
+            onUploadFile={handleCsvUpload}
             onUseList={(id) => useListMutation.mutate(id)}
             useListPending={useListMutation.isPending || uploadMutation.isPending}
           />
@@ -506,7 +544,7 @@ export default function TemplateBuilder() {
           selectedLists={selectedLists}
           pending={useListMutation.isPending}
           onRefresh={() => listsQuery.refetch()}
-          onUploadFile={(file) => { setListPickerOpen(false); uploadMutation.mutate(file); }}
+          onUploadFile={(file) => { setListPickerOpen(false); handleCsvUpload(file); }}
           onClose={() => setListPickerOpen(false)}
           onUse={(id) => useListMutation.mutate(id)}
         />
