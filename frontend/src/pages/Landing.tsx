@@ -8,7 +8,7 @@ const features = [
   { icon: BarChart3, title: "Know what happens next.", body: "Review sends, opens, replies, clicks, and bounces. Follow the results back to the campaigns and messages behind them." },
 ];
 const faqs = [
-  ["What does Replylane do?", "Replylane brings personalized email campaigns, follow-ups, connected inboxes, campaign reporting, and reply conversations into one workspace."],
+  ["What does Rohly do?", "Rohly brings personalized email campaigns, follow-ups, connected inboxes, campaign reporting, and reply conversations into one workspace."],
   ["Can I use my existing lead lists?", "Yes. Import a CSV, map its columns, and prepare your outreach with your existing lead-level content. Your CSV message text is not generated or rewritten."],
   ["Can I pause a campaign or edit its schedule?", "Yes. Campaigns retain their existing start, pause, stop, reactivation, and scheduling controls. You can review the sequence and sending status inside the campaign."],
   ["Where do replies appear?", "Campaign replies appear in Master Inbox. Open a conversation, review its message thread, classify the reply, and respond through your connected account."],
