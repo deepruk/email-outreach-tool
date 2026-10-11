@@ -76,3 +76,43 @@ async def test_missing_or_other_users_account_cannot_rebuild_campaign(monkeypatc
         await module.edit_campaign("campaign", payload, SimpleNamespace(id="owner"))
     assert error.value.status_code == 422
     assert writes == [{"$set": {"edit_lock": True}}, {"$unset": {"edit_lock": ""}}]
+
+@pytest.mark.asyncio
+async def test_paused_edit_adds_lead_without_resending_or_deleting_history(monkeypatch):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from routers import rohly_campaigns as module
+    stamp = datetime.now(timezone.utc)
+    campaign = {"id":"campaign", "status":"paused", "name":"Old", "steps":[{"template_id":"t", "step_index":0}], "recipient_ids":["old"], "inbox_ids":["i"], "launched_at":stamp, "timezone":"UTC", "min_gap_minutes":1, "max_gap_minutes":2, "sending_window_start":"09:00", "sending_window_end":"18:00", "sending_days":list(range(7))}
+    sent = {"id":"history", "recipient_id":"old", "step_index":0, "status":"sent", "inbox_id":"i", "sent_at":stamp, "scheduled_at":stamp}
+    inserted, deleted, saved = [], [], []
+    class Cursor:
+        def __init__(self, rows): self.rows = rows
+        async def to_list(self, limit): return self.rows
+    class Campaigns:
+        async def find_one(self, scope): return campaign.copy()
+        async def update_one(self, scope, update):
+            saved.append(update)
+            return SimpleNamespace(modified_count=1)
+    class Rows:
+        def __init__(self, rows): self.rows = rows
+        def find(self, scope):
+            assert scope["user_id"] == "owner"
+            return Cursor(self.rows)
+    class History:
+        async def find_one(self, scope): return None
+        def find(self, scope):
+            if scope.get("replied_at") is None and "replied_at" in scope:
+                return Cursor([{"id":"old-future"}])
+            return Cursor([sent])
+        async def insert_many(self, rows): inserted.extend(rows)
+        async def delete_many(self, scope): deleted.extend(scope["id"]["$in"])
+    monkeypatch.setattr(module, "db", SimpleNamespace(campaigns=Campaigns(), inboxes=Rows([{"id":"i","daily_sending_limit":100}]), recipients=Rows([{"id":"old","email":"old@example.com"},{"id":"new","email":"new@example.com"}]), templates=Rows([{"id":"t"}]), scheduled_emails=History()))
+    payload = module.CampaignEdit(name="Edited", inbox_ids=["i"], recipient_ids=["old","new"], steps=[{"template_id":"t","step_index":0}])
+    result = await module.edit_campaign("campaign", payload, SimpleNamespace(id="owner"))
+    assert result["status"] == "paused"
+    assert result["total_count"] == 2
+    assert [row["recipient_id"] for row in inserted] == ["new"]
+    assert deleted == ["old-future"]
+    assert inserted[0]["user_id"] == "owner"
+    assert saved[-1] == {"$unset":{"edit_lock":""}}

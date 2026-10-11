@@ -787,6 +787,9 @@ async def edit_campaign(campaign_id: str, input: CampaignEdit, user: UserPublic 
         recipients = await db.recipients.find({"id": {"$in": recipient_ids}, "user_id": user.id}).to_list(5000)
         if len(inboxes) != len(inbox_ids) or len(recipients) != len(recipient_ids):
             raise HTTPException(status_code=422, detail="Select available connected accounts and leads from your workspace")
+        emails = [row["email"].strip().lower() for row in recipients]
+        if len(set(emails)) != len(emails):
+            raise HTTPException(status_code=422, detail="Select each lead email only once")
         steps = _edit_steps(campaign["steps"], [step.model_dump() for step in input.steps], campaign.get("next_step_index", 0))
         template_ids = {value for step in steps for value in [step["template_id"], *step.get("variant_template_ids", [])]}
         templates = await db.templates.find({"id": {"$in": list(template_ids)}, "user_id": user.id}).to_list(1000)
