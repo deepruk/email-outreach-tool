@@ -225,6 +225,22 @@ async def remove_suppression(email: str, user: UserPublic = Depends(require_user
     return None
 
 
+class CampaignRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+@router.patch("/{campaign_id}/name")
+async def rename_campaign(campaign_id: str, input: CampaignRenameRequest, user: UserPublic = Depends(require_user)) -> dict:
+    name = input.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Campaign name cannot be empty")
+    result = await db.campaigns.update_one({"id": campaign_id, "user_id": user.id, "campaign_type": "rohly_template"}, {"$set": {"name": name, "updated_at": datetime.now(timezone.utc)}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    await db.scheduled_emails.update_many({"campaign_id": campaign_id, "user_id": user.id}, {"$set": {"campaign_name": name}})
+    return {"id": campaign_id, "name": name}
+
+
 @router.get("/campaigns")
 async def list_campaigns(user: UserPublic = Depends(require_user)) -> list[dict]:
     rows = await db.campaigns.find({"campaign_type": "rohly_template", "user_id": user.id}).sort("created_at", -1).to_list(1000)
