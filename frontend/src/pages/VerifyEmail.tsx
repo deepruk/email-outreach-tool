@@ -20,7 +20,7 @@ export default function VerifyEmail() {
       client.setQueryData(["me"], user);
       setState("success");
       setMessage("Your email is verified. Redirecting to your dashboard...");
-      setTimeout(() => navigate("/", { replace: true }), 700);
+      setTimeout(() => navigate("/app", { replace: true }), 700);
     }).catch((error) => {
       const body = error instanceof ApiError ? error.body as {detail?: string} : null;
       setState("error");
