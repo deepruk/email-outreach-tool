@@ -66,6 +66,6 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
-        run: pip install fastapi motor python-dotenv "pydantic>=2.6.4" email-validator google-api-python-client google-auth google-auth-oauthlib requests pytest pytest-xdist pytest-asyncio httpx passlib "bcrypt==4.0.1" pyjwt
+        run: pip install fastapi motor python-dotenv "pydantic>=2.6.4" email-validator google-api-python-client google-auth google-auth-oauthlib requests pytest pytest-xdist pytest-asyncio httpx passlib "bcrypt==4.0.1" pyjwt python-multipart
       - name: Run regression tests
         run: pytest -q tests/test_rohly_daily_limits.py tests/test_rohly_open_tracking.py tests/test_rohly_campaign_edit.py tests/test_csv_helpers.py
