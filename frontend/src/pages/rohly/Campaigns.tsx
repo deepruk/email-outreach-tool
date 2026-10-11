@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowUpRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { apiDelete, apiGet } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
@@ -17,6 +17,7 @@ type CampaignRow = {
   totalLeads: number;
   sent: number;
   failed: number;
+  bounces: number;
   replies: number;
   positive: number;
   steps: unknown[];
@@ -35,6 +36,7 @@ function normalize(row: any, isRohly: boolean): CampaignRow | null {
     totalLeads: Number(row.total_leads ?? row.total_count ?? 0),
     sent: Number(row.emails_sent ?? row.sent_count ?? 0),
     failed: Number(row.failed_emails ?? row.failed_count ?? 0),
+    bounces: Number(row.bounces ?? 0),
     replies: Number(row.replies ?? 0),
     positive: Number(row.positive_replies ?? 0),
     steps: Array.isArray(row.steps) ? row.steps : [],
@@ -95,6 +97,26 @@ export default function Campaigns() {
 
   const toggle = (id: string) =>
     setSelected((items) => items.includes(id) ? items.filter((x) => x !== id) : [...items, id]);
+
+  const renameCampaign = async (campaign: CampaignRow) => {
+    const entered = window.prompt("Enter a new campaign name", campaign.name);
+    if (entered === null) return;
+    const name = entered.trim();
+    if (!name) { toast.error("Campaign name cannot be empty"); return; }
+    if (name === campaign.name) return;
+    try {
+      const endpoint = campaign.isRohly ? `/workspace/rohly-campaigns/${campaign.id}/name` : `/csv/campaigns/${campaign.id}/name`;
+      await apiPatch(endpoint, { name });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["csv-campaigns"] }),
+        client.invalidateQueries({ queryKey: ["rohly-campaigns"] }),
+        client.invalidateQueries({ queryKey: ["campaign-performance"] }),
+      ]);
+      toast.success("Campaign renamed");
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to rename campaign");
+    }
+  };
 
   const deleteSelected = async () => {
     const rows = campaigns.filter((c) => selected.includes(c.id));
@@ -175,7 +197,7 @@ export default function Campaigns() {
             <EmptyState title="No campaigns found" description="Create a campaign or change your search/filter." />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] text-left">
+              <table className="w-full min-w-[1150px] text-left">
                 <thead className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
                   <tr>
                     <th className="w-10 px-4 py-3"><input type="checkbox" aria-label="Select all" checked={selected.length === filtered.length && filtered.length > 0} onChange={() => setSelected(selected.length === filtered.length ? [] : filtered.map((c) => c.id))} /></th>
@@ -191,7 +213,7 @@ export default function Campaigns() {
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((c) => {
                     const planned = Math.max(1, c.totalLeads * Math.max(1, c.steps.length));
-                    const progress = Math.min(100, Math.round((c.sent / planned) * 100));
+                    const progress = Math.min(100, Math.round((c.sent / planned) * 100));\n                    const attempts = c.sent + c.failed;\n                    const bounceRate = attempts > 0 ? `${((c.bounces / attempts) * 100).toFixed(1)}%` : "0.0%";
                     return (
                       <tr key={`${c.isRohly ? "rohly" : "csv"}-${c.id}`} className="group text-xs transition-colors hover:bg-slate-50/80">
                         <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${c.name}`} checked={selected.includes(c.id)} onChange={() => toggle(c.id)} /></td>
@@ -210,7 +232,7 @@ export default function Campaigns() {
                         <td className="px-4 py-3 text-red-500">{c.failed}</td>
                         <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                         <td className="px-4 py-3 text-right">
-                          <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
+                          <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><Pencil size={12} /> Rename</button>\n                          <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
                           {c.status !== "running" && (
                             <button onClick={() => { if (window.confirm(`Delete campaign "${c.name}"?`)) { (c.isRohly ? apiDelete<void>(`/workspace/rohly-campaigns/${c.id}`) : apiDelete<void>(`/csv/campaigns/${c.id}`)).then(() => { client.invalidateQueries({ queryKey: c.isRohly ? ["rohly-campaigns"] : ["csv-campaigns"] }); client.invalidateQueries({ queryKey: ["command-center"] }); }).catch(() => toast.error("Unable to delete campaign")); } }} className="ml-4 text-xs font-semibold text-red-600">
                               <Trash2 size={13} className="inline" />
