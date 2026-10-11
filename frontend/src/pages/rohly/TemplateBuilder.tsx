@@ -69,6 +69,7 @@ export default function TemplateBuilder() {
   const [selectedLists, setSelectedLists] = useState<string[]>([]);
   const [listRecipientMap, setListRecipientMap] = useState<Record<string, string[]>>({});
   const [listPickerOpen, setListPickerOpen] = useState(false);
+  const [pendingListId, setPendingListId] = useState<string | null>(null);
   const [steps, setSteps] = useState<Step[]>([emptyStep(0)]);
   const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [minGapMinutes, setMinGapMinutes] = useState(10);
@@ -150,6 +151,7 @@ export default function TemplateBuilder() {
 
   const useListMutation = useMutation({
     mutationFn: (sourceId: string) => apiPost<UseListResponse>(`/workspace/rohly-campaign-lists/${sourceId}/use`, {}),
+    onMutate: (sourceId) => setPendingListId(sourceId),
     onSuccess: async (result) => {
       setSelectedRecipients((current) => Array.from(new Set([...current, ...result.recipient_ids])));
       setSelectedLists((current) => Array.from(new Set([...current, result.source_id])));
@@ -169,6 +171,7 @@ export default function TemplateBuilder() {
         : `${result.count} contacts added from ${result.filename}`);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add this list"),
+    onSettled: () => setPendingListId(null),
   });
 
   const uploadMutation = useMutation({
@@ -504,9 +507,9 @@ export default function TemplateBuilder() {
         <ListPicker
           lists={lists}
           selectedLists={selectedLists}
-          pending={useListMutation.isPending}
+          pendingListId={pendingListId}
           onRefresh={() => listsQuery.refetch()}
-          onUploadFile={(file) => { setListPickerOpen(false); uploadMutation.mutate(file); }}
+          onUploadFile={(file) => uploadMutation.mutate(file)}
           onClose={() => setListPickerOpen(false)}
           onUse={(id) => useListMutation.mutate(id)}
         />
@@ -967,7 +970,7 @@ function SettingsStep(props: {
 function ListPicker(props: {
   lists: RecipientList[];
   selectedLists: string[];
-  pending: boolean;
+  pendingListId: string | null;
   onRefresh: () => void;
   onUploadFile: (file: File) => void;
   onClose: () => void;
@@ -981,7 +984,7 @@ function ListPicker(props: {
             <Upload size={13} /> Upload CSV
             <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onUploadFile(file); event.currentTarget.value = ""; }} />
           </label></div>
-        <div className="max-h-[60vh] overflow-auto p-4">{props.lists.length ? props.lists.map((list) => { const active = props.selectedLists.includes(list.id); return <div key={list.id} className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 p-4"><FileSpreadsheet size={17} className="text-violet-600" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{list.filename}</p><p className="mt-1 text-[10px] text-slate-500">{list.row_count} contacts</p></div><Button size="sm" variant={active ? "outline" : "default"} disabled={active || props.pending} onClick={() => props.onUse(list.id)}>{active ? "Added" : props.pending ? "Adding…" : "Add list"}</Button></div>; }) : <div className="py-10 text-center text-xs text-slate-500">No saved lists found. Upload a CSV first.</div>}</div>
+        <div className="max-h-[60vh] overflow-auto p-4">{props.lists.length ? props.lists.map((list) => { const active = props.selectedLists.includes(list.id); return <div key={list.id} className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 p-4"><FileSpreadsheet size={17} className="text-violet-600" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{list.filename}</p><p className="mt-1 text-[10px] text-slate-500">{list.row_count} contacts</p></div><Button size="sm" variant={active ? "outline" : "default"} disabled={active || props.pendingListId !== null} onClick={() => props.onUse(list.id)}>{active ? "Added" : props.pendingListId === list.id ? "Adding…" : "Add list"}</Button></div>; }) : <div className="py-10 text-center text-xs text-slate-500">No saved lists found. Upload a CSV first.</div>}</div>
         <div className="flex justify-end border-t border-slate-200 px-5 py-3"><Button variant="outline" onClick={props.onClose}>Done</Button></div>
       </div>
     </div>
