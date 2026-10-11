@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowUpRight, Check, Clock3, Layers3, Mail, MessageSquareReply, Pencil, Plus, RefreshCw, Search, Send, ShieldCheck, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
+import type { CommandCenter } from "@/lib/types";
+import { CampaignActivity } from "@/components/rohly/CampaignActivity";
+import "@/components/rohly/campaigns.css";
 import { StatusBadge } from "@/components/rohly/StatusBadge";
 
 type CampaignRow = {
@@ -53,17 +56,27 @@ export default function Campaigns() {
 
   const csv = useQuery({
     queryKey: ["csv-campaigns"],
+    refetchInterval: 30000,
     queryFn: () => apiGet<any[]>("/csv/campaigns"),
   });
   const rohly = useQuery({
     queryKey: ["rohly-campaigns"],
+    refetchInterval: 30000,
     queryFn: () => apiGet<any[]>("/workspace/rohly-campaigns/campaigns"),
   });
   const livePerformance = useQuery({
     queryKey: ["campaign-performance"],
+    refetchInterval: 30000,
     queryFn: () => apiGet<any[]>("/product/campaigns"),
   });
 
+  const activity = useQuery({
+    queryKey: ["command-center"],
+    queryFn: () => apiGet<CommandCenter>("/product/dashboard"),
+    refetchInterval: 30000,
+  });
+  const refreshing = csv.isFetching || rohly.isFetching || livePerformance.isFetching || activity.isFetching;
+  const refresh = () => { void Promise.all([csv.refetch(), rohly.refetch(), livePerformance.refetch(), activity.refetch()]); };
   const performanceById = new Map((livePerformance.data ?? []).map((row) => [String(row.id), row]));
   const campaigns = [
     ...(csv.data ?? []).map((r) => normalize(r, false)),
@@ -144,37 +157,58 @@ export default function Campaigns() {
     }
   };
 
+  const totals = campaigns.reduce((sum, row) => ({ leads: sum.leads + row.totalLeads, sent: sum.sent + row.sent, replies: sum.replies + row.replies }), { leads: 0, sent: 0, replies: 0 });
+  const metrics = [
+    { label: "Active campaigns", value: counts.running, note: `${counts.all} campaigns in your workspace`, icon: Send, tone: "blue" },
+    { label: "Total leads", value: totals.leads, note: "Across all campaigns", icon: Users, tone: "violet" },
+    { label: "Emails sent", value: totals.sent, note: "All-time campaign sends", icon: Mail, tone: "blue" },
+    { label: "Replies received", value: totals.replies, note: totals.sent ? `${(totals.replies / totals.sent * 100).toFixed(1)}% reply rate` : "Reply rate appears after sending", icon: MessageSquareReply, tone: "green" },
+  ];
   return (
-    <div data-testid="campaigns-page" className="min-h-[calc(100vh-8rem)]">
+    <div data-testid="campaigns-page" className="rohly-campaigns min-h-[calc(100vh-8rem)]">
       <PageHeader
-        eyebrow="Campaigns"
+        eyebrow="OUTREACH WORKSPACE"
         title="Campaigns"
-        description="Create, monitor, and optimize every outbound campaign from one place."
+        description="Turn thoughtful outreach into your next conversation."
         actions={
-          <Button onClick={() => { window.location.href = "/campaigns/new"; }} className="h-10 gap-2 rounded-lg bg-blue-700 px-4 shadow-sm hover:bg-blue-800">
+          <div className="cp-head-actions"><button onClick={refresh} className="cp-refresh" disabled={refreshing} aria-label="Refresh campaign data"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} /> Refresh</button><Button onClick={() => { window.location.href = "/campaigns/new"; }} className="cp-create h-10 gap-2 rounded-lg bg-blue-700 px-4 shadow-sm hover:bg-blue-800">
             <Plus size={14} /> New campaign
-          </Button>
+          </Button></div>
         }
       />
 
-      <div className="mb-4 border-b border-slate-200">
-        <div className="flex items-end gap-6 overflow-x-auto">
+      {!failed && (csv.isError || rohly.isError || livePerformance.isError) ? <div className="cp-data-notice" role="status">Some campaign data could not refresh. <button onClick={refresh}>Try again</button></div> : null}
+      <div className="cp-metrics" aria-busy={loading}>
+        {metrics.map(({ label, value, note, icon: Icon, tone }) => <section key={label} className="cp-glass cp-metric"><div className="cp-metric-top"><span>{label}</span><span className={`cp-icon cp-${tone}`}><Icon size={16} /></span></div><strong>{loading ? "—" : failed ? "Unavailable" : value.toLocaleString()}</strong><p>{loading ? "Loading campaign data…" : failed ? "Try refreshing your data" : note}</p></section>)}
+      </div>
+      <div className="cp-overview">
+        <CampaignActivity data={activity.data?.chart} isLoading={activity.isLoading} isError={activity.isError} refreshing={activity.isFetching} updatedAt={activity.dataUpdatedAt} onRetry={() => { void activity.refetch(); }} />
+        <section className="cp-glass cp-tools"><div className="cp-section-heading"><span className="cp-eyebrow">YOUR WORKFLOW</span><h2>Built for better outreach</h2><p>Everything you need to keep moving.</p></div>
+          <Link to="/campaigns/new" className="cp-tool"><span className="cp-icon cp-violet"><Layers3 size={17} /></span><span><strong>Personalized sequences</strong><small>Create campaigns and follow-ups.</small></span><ArrowUpRight size={14} /></Link>
+          <Link to="/inboxes" className="cp-tool"><span className="cp-icon cp-blue"><ShieldCheck size={17} /></span><span><strong>Sending infrastructure</strong><small>Manage inboxes, limits, and health.</small></span><ArrowUpRight size={14} /></Link>
+          <Link to="/inbox" className="cp-tool"><span className="cp-icon cp-green"><MessageSquareReply size={17} /></span><span><strong>One place for replies</strong><small>Keep conversations in Master Inbox.</small></span><ArrowUpRight size={14} /></Link>
+          <div className="cp-workflow-note"><Check size={13} /><span>Your campaigns. Your schedule. Your control.</span></div>
+        </section>
+      </div>
+      <section className="cp-library"><div className="cp-library-heading"><div><span className="cp-eyebrow">CAMPAIGN LIBRARY</span><h2>All your outreach, organized.</h2></div><span className="cp-count"><Layers3 size={13} />{loading ? "Loading…" : `${counts.all} campaigns`}</span></div>
+      <div className="cp-tabs">
+        <div className="flex items-center gap-2 overflow-x-auto">
           {([
             ["all", `All Campaigns (${counts.all})`],
             ["running", `Active (${counts.running})`],
             ["paused", `Paused (${counts.paused})`],
             ["stopped", `Stopped (${counts.stopped})`],
           ] as const).map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} className={`relative whitespace-nowrap pb-3 text-xs font-semibold ${tab === key ? "text-blue-700" : "text-slate-500 hover:text-slate-800"}`}>
+            <button key={key} onClick={() => setTab(key)} className={`cp-tab ${tab === key ? "cp-tab-active" : ""}`} aria-pressed={tab === key}>
               {label}
-              {tab === key && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-blue-700" />}
+
             </button>
           ))}
         </div>
       </div>
 
       <div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="cp-table-toolbar">
           <div className="flex items-center gap-2">
             {selected.length > 0 && (
               <button onClick={deleteSelected} className="h-9 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-600">
@@ -183,12 +217,13 @@ export default function Campaigns() {
             )}
             <div className="relative w-full sm:w-80">
               <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search campaigns" className="h-9 rounded-lg border-slate-200 pl-9 text-xs" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search campaigns…" aria-label="Search campaigns" className="cp-search h-9 rounded-lg border-slate-200 pl-9 text-xs" />
             </div>
           </div>
+          <span className="cp-table-caption"><Clock3 size={12} /> Refreshes every 30 seconds</span>
         </div>
 
-        <Surface className="overflow-hidden" testId="campaigns-table">
+        <Surface className="cp-table-surface overflow-hidden" testId="campaigns-table">
           {loading ? <SkeletonRows rows={6} /> : failed ? (
             <div className="p-10 text-center text-sm text-red-600">
               Unable to load campaigns. Please refresh the page.
@@ -197,7 +232,7 @@ export default function Campaigns() {
             <EmptyState title="No campaigns found" description="Create a campaign or change your search/filter." />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1150px] text-left">
+              <table className="w-full min-w-[960px] text-left">
                 <thead className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
                   <tr>
                     <th className="w-10 px-4 py-3"><input type="checkbox" aria-label="Select all" checked={selected.length === filtered.length && filtered.length > 0} onChange={() => setSelected(selected.length === filtered.length ? [] : filtered.map((c) => c.id))} /></th>
@@ -214,10 +249,8 @@ export default function Campaigns() {
                   {filtered.map((c) => {
                     const planned = Math.max(1, c.totalLeads * Math.max(1, c.steps.length));
                     const progress = Math.min(100, Math.round((c.sent / planned) * 100));
-                    const attempts = c.sent + c.failed;
-                    const bounceRate = attempts > 0 ? `${((c.bounces / attempts) * 100).toFixed(1)}%` : "0.0%";
                     return (
-                      <tr key={`${c.isRohly ? "rohly" : "csv"}-${c.id}`} className="group text-xs transition-colors hover:bg-slate-50/80">
+                      <tr key={`${c.isRohly ? "rohly" : "csv"}-${c.id}`} className={`group text-xs transition-colors hover:bg-slate-50/80 ${selected.includes(c.id) ? "cp-row-selected" : ""}`}>
                         <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${c.name}`} checked={selected.includes(c.id)} onChange={() => toggle(c.id)} /></td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
@@ -230,14 +263,14 @@ export default function Campaigns() {
                         </td>
                         <td className="px-4 py-3 font-medium">{c.totalLeads}</td>
                         <td className="px-4 py-3 font-medium">{c.sent}</td>
-                        <td className="px-4 py-3">{c.replies}</td>
+                        <td className="px-4 py-3"><span className="cp-replies">{c.replies}</span></td>
                         <td className="px-4 py-3 text-red-500">{c.failed}</td>
                         <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                         <td className="px-4 py-3 text-right">
                           <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><Pencil size={12} /> Rename</button>
                           <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
                           {c.status !== "running" && (
-                            <button onClick={() => { if (window.confirm(`Delete campaign "${c.name}"?`)) { (c.isRohly ? apiDelete<void>(`/workspace/rohly-campaigns/${c.id}`) : apiDelete<void>(`/csv/campaigns/${c.id}`)).then(() => { client.invalidateQueries({ queryKey: c.isRohly ? ["rohly-campaigns"] : ["csv-campaigns"] }); client.invalidateQueries({ queryKey: ["command-center"] }); }).catch(() => toast.error("Unable to delete campaign")); } }} className="ml-4 text-xs font-semibold text-red-600">
+                            <button onClick={() => { if (window.confirm(`Delete campaign "${c.name}"?`)) { (c.isRohly ? apiDelete<void>(`/workspace/rohly-campaigns/${c.id}`) : apiDelete<void>(`/csv/campaigns/${c.id}`)).then(() => { client.invalidateQueries({ queryKey: c.isRohly ? ["rohly-campaigns"] : ["csv-campaigns"] }); client.invalidateQueries({ queryKey: ["command-center"] }); }).catch(() => toast.error("Unable to delete campaign")); } }} aria-label={`Delete ${c.name}`} className="ml-4 text-xs font-semibold text-red-600">
                               <Trash2 size={13} className="inline" />
                             </button>
                           )}
@@ -251,6 +284,7 @@ export default function Campaigns() {
           )}
         </Surface>
       </div>
+      </section>
     </div>
   );
 }
