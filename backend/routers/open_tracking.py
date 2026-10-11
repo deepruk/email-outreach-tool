@@ -8,7 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from urllib.parse import quote
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import RedirectResponse, Response
 from googleapiclient.discovery import build
 
@@ -16,17 +16,7 @@ from lib.db import db
 from lib.campaign_events import emit_campaign_event
 
 router = APIRouter(prefix="/track", tags=["email-tracking"])
-# Transparent 1x1 GIF used as the tracking image. The image itself is not proof
-# that a human opened the message: some mail security systems fetch it automatically.
 PIXEL = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==")
-
-# Filter requests that clearly identify known scanners/crawlers. This is a
-# heuristic: Gmail and other privacy proxies may not identify themselves clearly.
-AUTOMATED_OPEN_UA = (
-    "bot", "crawler", "spider", "scanner", "proofpoint", "mimecast",
-    "barracuda", "urlscan", "fireeye", "fortinet", "safelinks",
-    "email security", "security gateway",
-)
 URL_RE = re.compile(r"(https?://[^\s<>\"]+)")
 
 
@@ -116,12 +106,7 @@ async def _cancel_future(row: dict, reason: str) -> None:
 
 
 @router.get("/open/{tracking_id}")
-async def track_open(tracking_id: str, request: Request) -> Response:
-    user_agent = request.headers.get("user-agent", "").lower()
-    # Serve the same pixel to every client, but do not count obvious automated scans.
-    if any(marker in user_agent for marker in AUTOMATED_OPEN_UA):
-        return Response(content=PIXEL, media_type="image/gif", headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"})
-
+async def track_open(tracking_id: str) -> Response:
     now = datetime.now(timezone.utc)
     row = await db.scheduled_emails.find_one({"tracking_id": tracking_id})
     if row:
