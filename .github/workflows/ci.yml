@@ -60,4 +60,6 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: backend
+          MONGO_URL: mongodb://127.0.0.1:27017
+          DB_NAME: rohly_test
         run: pytest -q
