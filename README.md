@@ -1,9 +1,8 @@
-# farm-ts
+# Rohly — B2B Email Outreach Platform
 
-Minimal split backend/frontend starter: **FastAPI + MongoDB** behind a
-**Vite + React 19 + TypeScript** frontend, joined by a small typed fetch layer
-over `/api`. This is a bare skeleton — no app features are implemented. Build on
-top of it.
+Rohly is a B2B outbound campaign application built with **FastAPI + MongoDB** and a **React 19 + Vite + TypeScript** frontend. The existing product includes authenticated workspaces, mailbox connections, CSV and sequence-based campaigns, lead management, reply synchronization, analytics, billing, and campaign tracking. Feature availability depends on provider configuration and the deployed commit; verify each workflow in the live environment before relying on it.
+
+The Smartlead-parity roadmap is documented in [`docs/SMARTLEAD_PARITY_SPEC.md`](docs/SMARTLEAD_PARITY_SPEC.md). Changes are being delivered incrementally with reliability and test coverage prioritized over placeholder UI.
 
 ## Layout
 
