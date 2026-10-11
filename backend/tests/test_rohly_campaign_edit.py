@@ -116,3 +116,33 @@ async def test_paused_edit_adds_lead_without_resending_or_deleting_history(monke
     assert deleted == ["old-future"]
     assert inserted[0]["user_id"] == "owner"
     assert saved[-1] == {"$unset":{"edit_lock":""}}
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("initial_status, expected", [("paused", []), ("active", ["sending", "scheduled"])])
+async def test_sender_keeps_paused_messages_pending(monkeypatch, initial_status, expected):
+    import asyncio
+    from types import SimpleNamespace
+    from datetime import datetime, timezone
+    from routers import rohly_campaigns as module
+    writes, reads = [], []
+    class Cursor:
+        def sort(self, *args): return self
+        async def to_list(self, limit):
+            return [{"id":"pending", "campaign_id":"campaign", "scheduled_at":datetime.now(timezone.utc), "step_index":0}]
+    class Emails:
+        def find(self, scope): return Cursor()
+        async def update_one(self, scope, change):
+            writes.append(change["$set"]["status"])
+            return SimpleNamespace(modified_count=1)
+    class Campaigns:
+        async def find_one(self, scope):
+            reads.append(scope)
+            return {"status": initial_status if len(reads)==1 else "paused"}
+        async def distinct(self, *args): return []
+    async def finish_cycle(seconds): raise asyncio.CancelledError
+    monkeypatch.setattr(module, "db", SimpleNamespace(campaigns=Campaigns(), scheduled_emails=Emails()))
+    monkeypatch.setattr(module.asyncio, "sleep", finish_cycle)
+    with pytest.raises(asyncio.CancelledError):
+        await module.process_template_campaigns()
+    assert reads
+    assert writes == expected
