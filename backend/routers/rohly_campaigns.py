@@ -630,53 +630,60 @@ async def update_campaign_status(campaign_id: str, input: CampaignStatusRequest,
         raise HTTPException(status_code=404, detail="Rohly campaign not found")
     if input.status not in {"active", "paused", "stopped"}:
         raise HTTPException(status_code=422, detail="Status must be active, paused, or stopped")
-    if campaign.get("status") == "completed":
-        raise HTTPException(status_code=409, detail="Completed campaigns cannot be resumed")
-    if campaign.get("edit_lock"):
-        raise HTTPException(status_code=409, detail="Campaign changes are being saved. Try again shortly.")
-    # Reactivating a stopped campaign must rebuild only the remaining unsent
-    # recipient/step pairs. Stop intentionally cancels future rows, so merely
-    # changing the status back to active would leave nothing to send.
-    if input.status == "active" and campaign.get("status") == "stopped":
-        recipients = await db.recipients.find({"id": {"$in": campaign["recipient_ids"]}, "user_id": user.id}).to_list(5000)
-        protected = await db.scheduled_emails.find({
-            "campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id,
-            "$or": [{"status": {"$in": ["sent", "failed", "sending"]}}, {"replied_at": {"$ne": None}}],
-        }).to_list(10000)
-        protected_keys = {(row.get("recipient_id"), row.get("step_index")) for row in protected}
-        rebuilt = _schedule_events(
-            campaign_id, campaign["name"], recipients, campaign["inbox_ids"], campaign["steps"],
-            campaign.get("timezone", "Asia/Kolkata"), campaign["min_gap_minutes"], campaign["max_gap_minutes"],
-            campaign.get("sending_window_start", "09:00"), campaign.get("sending_window_end", "18:00"),
-            campaign.get("sending_days", [0, 1, 2, 3, 4]), campaign.get("distribution_mode", "pattern"),
-        )
-        future = [event for event in rebuilt if (event.get("recipient_id"), event.get("step_index")) not in protected_keys]
-        if not future:
-            raise HTTPException(status_code=409, detail="No unsent emails remain to reactivate")
-        await db.scheduled_emails.delete_many({
-            "campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id,
-            "status": {"$in": ["scheduled", "cancelled"]},
-        })
-        for event in future:
-            event["user_id"] = user.id
-        if future:
-            await db.scheduled_emails.insert_many(future)
-        first_at = min((event["scheduled_at"] for event in future), default=None)
-        await db.campaigns.update_one(
-            {"id": campaign_id, "user_id": user.id},
-            {"$set": {"status": "active", "next_send_at": first_at, "emails_scheduled": len(future), "reactivated_at": datetime.now(timezone.utc)}},
-        )
-        campaign.update({"status": "active", "next_send_at": first_at, "emails_scheduled": len(future)})
-    else:
-        await db.campaigns.update_one({"id": campaign_id, "user_id": user.id}, {"$set": {"status": input.status}})
-        if input.status == "stopped":
-            await db.scheduled_emails.update_many(
-                {"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id, "status": "scheduled"},
-                {"$set": {"status": "cancelled", "error": "Campaign stopped by user"}},
+    transition = await db.campaigns.update_one({"id": campaign_id, "user_id": user.id, "status": campaign["status"], "edit_lock": {"$ne": True}, "status_lock": {"$ne": True}}, {"$set": {"status_lock": True}})
+    if not transition.modified_count:
+        raise HTTPException(status_code=409, detail="Campaign is busy. Reload and try again")
+    try:
+        if campaign.get("status") == "completed":
+            raise HTTPException(status_code=409, detail="Completed campaigns cannot be resumed")
+        if campaign.get("edit_lock"):
+            raise HTTPException(status_code=409, detail="Campaign changes are being saved. Try again shortly.")
+        # Reactivating a stopped campaign must rebuild only the remaining unsent
+        # recipient/step pairs. Stop intentionally cancels future rows, so merely
+        # changing the status back to active would leave nothing to send.
+        if input.status == "active" and campaign.get("status") == "stopped":
+            recipients = await db.recipients.find({"id": {"$in": campaign["recipient_ids"]}, "user_id": user.id}).to_list(5000)
+            protected = await db.scheduled_emails.find({
+                "campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id,
+                "$or": [{"status": {"$in": ["sent", "failed", "sending"]}}, {"replied_at": {"$ne": None}}],
+            }).to_list(10000)
+            protected_keys = {(row.get("recipient_id"), row.get("step_index")) for row in protected}
+            rebuilt = _schedule_events(
+                campaign_id, campaign["name"], recipients, campaign["inbox_ids"], campaign["steps"],
+                campaign.get("timezone", "Asia/Kolkata"), campaign["min_gap_minutes"], campaign["max_gap_minutes"],
+                campaign.get("sending_window_start", "09:00"), campaign.get("sending_window_end", "18:00"),
+                campaign.get("sending_days", [0, 1, 2, 3, 4]), campaign.get("distribution_mode", "pattern"),
             )
-        campaign["status"] = input.status
-    campaign.pop("_id", None)
-    return campaign
+            future = [event for event in rebuilt if (event.get("recipient_id"), event.get("step_index")) not in protected_keys]
+            if not future:
+                raise HTTPException(status_code=409, detail="No unsent emails remain to reactivate")
+            await db.scheduled_emails.delete_many({
+                "campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id,
+                "status": {"$in": ["scheduled", "cancelled"]},
+            })
+            for event in future:
+                event["user_id"] = user.id
+            if future:
+                await db.scheduled_emails.insert_many(future)
+            first_at = min((event["scheduled_at"] for event in future), default=None)
+            await db.campaigns.update_one(
+                {"id": campaign_id, "user_id": user.id},
+                {"$set": {"status": "active", "next_send_at": first_at, "emails_scheduled": len(future), "reactivated_at": datetime.now(timezone.utc)}},
+            )
+            campaign.update({"status": "active", "next_send_at": first_at, "emails_scheduled": len(future)})
+        else:
+            await db.campaigns.update_one({"id": campaign_id, "user_id": user.id}, {"$set": {"status": input.status}})
+            if input.status == "stopped":
+                await db.scheduled_emails.update_many(
+                    {"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id, "status": "scheduled"},
+                    {"$set": {"status": "cancelled", "error": "Campaign stopped by user"}},
+                )
+            campaign["status"] = input.status
+        campaign.pop("_id", None)
+        return campaign
+    finally:
+        await db.campaigns.update_one({"id": campaign_id, "user_id": user.id}, {"$unset": {"status_lock": ""}})
+
 
 
 @router.patch("/{campaign_id}/schedule")
@@ -772,7 +779,7 @@ async def edit_campaign(campaign_id: str, input: CampaignEdit, user: UserPublic 
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.get("status") not in {"paused", "queued", "stopped"}:
         raise HTTPException(status_code=409, detail="Pause the campaign before editing leads, accounts, or sequences")
-    lock = await db.campaigns.update_one({**scope, "status": campaign["status"], "edit_lock": {"$ne": True}}, {"$set": {"edit_lock": True}})
+    lock = await db.campaigns.update_one({**scope, "status": campaign["status"], "edit_lock": {"$ne": True}, "status_lock": {"$ne": True}}, {"$set": {"edit_lock": True}})
     if not lock.modified_count:
         raise HTTPException(status_code=409, detail="Campaign is busy. Reload and try again")
     event_scope = {"campaign_id": campaign_id, "source_type": "rohly_template", "user_id": user.id}
@@ -869,12 +876,16 @@ async def process_template_campaigns() -> None:
                 return (item.get("scheduled_at"), follow_rank if priority >= 50 else (1 - follow_rank))
             due.sort(key=priority_key)
             for item in due:
+                cached = campaign_cache.get(item["campaign_id"], {})
+                if cached.get("status") != "active" or cached.get("edit_lock"):
+                    continue
                 claimed = await db.scheduled_emails.update_one({"id": item["id"], "status": "scheduled"}, {"$set": {"status": "sending"}})
                 if claimed.modified_count != 1:
                     continue
                 campaign = await db.campaigns.find_one({"id": item["campaign_id"], "campaign_type": "rohly_template"})
-                if not campaign or campaign.get("status") != "active":
-                    await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": "cancelled"}})
+                if not campaign or campaign.get("status") != "active" or campaign.get("edit_lock"):
+                    pending_status = "scheduled" if campaign and (campaign.get("status") in {"paused", "queued"} or campaign.get("edit_lock")) else "cancelled"
+                    await db.scheduled_emails.update_one({"id": item["id"]}, {"$set": {"status": pending_status}})
                     continue
                 recipient = await db.recipients.find_one({"id": item["recipient_id"]})
                 if recipient:
