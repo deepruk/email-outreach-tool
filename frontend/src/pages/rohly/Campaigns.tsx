@@ -213,7 +213,9 @@ export default function Campaigns() {
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((c) => {
                     const planned = Math.max(1, c.totalLeads * Math.max(1, c.steps.length));
-                    const progress = Math.min(100, Math.round((c.sent / planned) * 100));\n                    const attempts = c.sent + c.failed;\n                    const bounceRate = attempts > 0 ? `${((c.bounces / attempts) * 100).toFixed(1)}%` : "0.0%";
+                    const progress = Math.min(100, Math.round((c.sent / planned) * 100));
+                    const attempts = c.sent + c.failed;
+                    const bounceRate = attempts > 0 ? `${((c.bounces / attempts) * 100).toFixed(1)}%` : "0.0%";
                     return (
                       <tr key={`${c.isRohly ? "rohly" : "csv"}-${c.id}`} className="group text-xs transition-colors hover:bg-slate-50/80">
                         <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${c.name}`} checked={selected.includes(c.id)} onChange={() => toggle(c.id)} /></td>
@@ -232,7 +234,8 @@ export default function Campaigns() {
                         <td className="px-4 py-3 text-red-500">{c.failed}</td>
                         <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><Pencil size={12} /> Rename</button>\n                          <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
+                          <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><Pencil size={12} /> Rename</button>
+                          <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
                           {c.status !== "running" && (
                             <button onClick={() => { if (window.confirm(`Delete campaign "${c.name}"?`)) { (c.isRohly ? apiDelete<void>(`/workspace/rohly-campaigns/${c.id}`) : apiDelete<void>(`/csv/campaigns/${c.id}`)).then(() => { client.invalidateQueries({ queryKey: c.isRohly ? ["rohly-campaigns"] : ["csv-campaigns"] }); client.invalidateQueries({ queryKey: ["command-center"] }); }).catch(() => toast.error("Unable to delete campaign")); } }} className="ml-4 text-xs font-semibold text-red-600">
                               <Trash2 size={13} className="inline" />
