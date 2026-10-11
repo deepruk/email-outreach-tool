@@ -193,7 +193,7 @@ export default function TemplateBuilder() {
   });
 
   const handleCsvUpload = (file: File) => {
-    if (uploadMutation.isPending || useListMutation.isPending) {
+    if (uploadingFileName || uploadMutation.isPending || useListMutation.isPending) {
       toast.warning("Please wait for the current CSV import to finish.");
       return;
     }
