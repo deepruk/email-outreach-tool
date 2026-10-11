@@ -6,6 +6,7 @@ from io import StringIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
 
 from lib.db import db
@@ -381,6 +382,22 @@ async def create_campaign(input: CsvCampaignCreate, user: UserPublic = Depends(r
     )
     await db.csv_campaigns.insert_one({**campaign.model_dump(), "user_id": user.id})
     return campaign
+
+
+class CampaignRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+@router.patch("/campaigns/{campaign_id}/name")
+async def rename_campaign(campaign_id: str, input: CampaignRenameRequest, user: UserPublic = Depends(require_user)) -> dict:
+    name = input.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Campaign name cannot be empty")
+    result = await db.csv_campaigns.update_one({"id": campaign_id, "user_id": user.id}, {"$set": {"name": name, "updated_at": datetime.now(timezone.utc)}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="CSV campaign not found")
+    await db.scheduled_emails.update_many({"campaign_id": campaign_id, "user_id": user.id}, {"$set": {"campaign_name": name}})
+    return {"id": campaign_id, "name": name}
 
 
 @router.get("/campaigns", response_model=list[CsvCampaign])
