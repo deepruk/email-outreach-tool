@@ -9,9 +9,7 @@ import Campaigns from "@/pages/rohly/Campaigns";
 import Leads from "@/pages/rohly/Leads";
 import UnifiedInbox from "@/pages/rohly/UnifiedInbox";
 import Inboxes from "@/pages/rohly/Inboxes";
-import Warmup from "@/pages/rohly/Warmup";
 import Analytics from "@/pages/rohly/Analytics";
-import Imports from "@/pages/rohly/Imports";
 import SettingsPage from "@/pages/rohly/Settings";
 import CampaignDetail from "@/pages/rohly/CampaignDetail";
 import TemplateBuilder from "@/pages/rohly/TemplateBuilder";
@@ -36,9 +34,9 @@ export default function App() {
         <Route path="/leads" element={<Leads />} />
         <Route path="/inbox" element={<UnifiedInbox />} />
         <Route path="/inboxes" element={<Inboxes />} />
-        <Route path="/warm-up" element={<Warmup />} />
+        <Route path="/warm-up" element={<Navigate to="/inboxes#inbox-health" replace />} />
         <Route path="/analytics" element={<Analytics />} />
-        <Route path="/imports" element={<Imports />} />
+        <Route path="/imports" element={<Navigate to="/campaigns/new" replace />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/billing" element={<Billing />} />
       </Route>
