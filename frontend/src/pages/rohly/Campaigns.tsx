@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, SkeletonRows, Surface } from "@/components/rohly/Primitives";
 import "@/components/rohly/campaigns.css";
+import "@/components/rohly/campaign-reference.css";
 import { StatusBadge } from "@/components/rohly/StatusBadge";
 
 type CampaignRow = {
@@ -20,6 +21,7 @@ type CampaignRow = {
   failed: number;
   bounces: number;
   replies: number;
+  opens: number | null;
   positive: number;
   steps: unknown[];
   createdAt: string;
@@ -39,6 +41,7 @@ function normalize(row: any, isRohly: boolean): CampaignRow | null {
     failed: Number(row.failed_emails ?? row.failed_count ?? 0),
     bounces: Number(row.bounces ?? 0),
     replies: Number(row.replies ?? 0),
+    opens: row.unique_opens == null ? null : Number(row.unique_opens),
     positive: Number(row.positive_replies ?? 0),
     steps: Array.isArray(row.steps) ? row.steps : [],
     createdAt: String(row.created_at ?? new Date(0).toISOString()),
@@ -151,10 +154,10 @@ export default function Campaigns() {
   };
 
   return (
-    <div data-testid="campaigns-page" className="rohly-campaigns min-h-[calc(100vh-8rem)]">
+    <div data-testid="campaigns-page" className="rohly-campaigns campaign-reference-list min-h-[calc(100vh-8rem)]">
       <PageHeader
-        eyebrow="OUTREACH WORKSPACE"
-        title="Campaigns"
+        eyebrow=""
+        title="Email campaigns"
         description="Create, organize, and manage your outreach campaigns."
         actions={
           <div className="cp-head-actions"><button onClick={refresh} className="cp-refresh" disabled={refreshing} aria-label="Refresh campaign data"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} /> Refresh</button><Button onClick={() => { window.location.href = "/campaigns/new"; }} className="cp-create h-10 gap-2 rounded-lg bg-blue-700 px-4 shadow-sm hover:bg-blue-800">
@@ -213,7 +216,7 @@ export default function Campaigns() {
                     <th className="px-4 py-3">Campaign</th>
                     <th className="px-4 py-3">Leads</th>
                     <th className="px-4 py-3">Sent</th>
-                    <th className="px-4 py-3">Replies</th>
+                    <th className="px-4 py-3">Opened</th><th className="px-4 py-3">Replied</th><th className="px-4 py-3">Positive</th>
                     <th className="px-4 py-3">Failed</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Actions</th>
@@ -231,13 +234,13 @@ export default function Campaigns() {
                             <div className="w-12"><div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-500"><span>{progress}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div></div>
                             <div>
                               <Link to={`/campaigns/${c.id}`} className="font-semibold text-slate-900 hover:text-blue-700">{c.name}</Link>
-                              <div className="mt-1 text-[10px] text-slate-400">{c.source} · {c.steps.length} {c.steps.length === 1 ? "step" : "steps"}</div>
+                              <div className="mt-1 text-[10px] text-slate-400">{c.steps.length} sequences · Created {new Date(c.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 font-medium">{c.totalLeads}</td>
                         <td className="px-4 py-3 font-medium">{c.sent}</td>
-                        <td className="px-4 py-3"><span className="cp-replies">{c.replies}</span></td>
+                        <td className="px-4 py-3 ref-opened">{c.opens ?? "—"}</td><td className="px-4 py-3"><span className="cp-replies">{c.replies}</span></td><td className="px-4 py-3 ref-positive">{c.positive}</td>
                         <td className="px-4 py-3 text-red-500">{c.failed}</td>
                         <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                         <td className="px-4 py-3 text-right">
