@@ -1,221 +1,129 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/outfit";
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&f[]=plus-jakarta-sans@400,500,600,700,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
-    --font-heading: 'Outfit Variable', sans-serif;
-    --font-sans: 'Geist Variable', sans-serif;
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.55 0.24 292);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.55 0.20 292);
-    --chart-1: oklch(0.55 0.2 264);
-    --chart-2: oklch(0.69 0.16 155);
-    --chart-3: oklch(0.72 0.15 74);
-    --chart-4: oklch(0.61 0.18 25);
-    --chart-5: oklch(0.5 0.03 260);
-    --radius: 0.5rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+  --background: 224 28% 4%;
+  --foreground: 210 40% 96%;
+  --card: 222 26% 8%;
+  --card-foreground: 210 40% 96%;
+  --popover: 222 26% 8%;
+  --popover-foreground: 210 40% 96%;
+  --primary: 19 100% 56%;
+  --primary-foreground: 220 30% 6%;
+  --secondary: 222 20% 14%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 222 20% 14%;
+  --muted-foreground: 215 15% 62%;
+  --accent: 190 90% 45%;
+  --accent-foreground: 220 30% 6%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 222 22% 15%;
+  --input: 222 22% 16%;
+  --ring: 19 100% 56%;
+  --radius: 0.75rem;
 }
 
-.dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+* {
+  border-color: hsl(var(--border));
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-[#f7f7f9] text-slate-950 antialiased;
-    }
-  html {
-    @apply font-sans;
-    }
-  h1, h2, h3, h4 {
-    font-family: 'Geist Variable', sans-serif;
-  }
-  button, a, input, select, textarea {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600/25 focus-visible:ring-offset-1;
-  }
+html {
+  background: #07090E;
+  color-scheme: dark;
 }
 
-/* The CSV wizard lives inside the authenticated Rohly shell. Its legacy standalone header is hidden. */
-[data-testid="csv-campaign-wizard"] {
-  min-height: auto;
-  background: transparent;
-}
-[data-testid="csv-campaign-wizard"] > [data-testid="wizard-header"] {
-  display: none;
-}
-[data-testid="exact-copy-rule"] p:last-child {
-  font-size: 0;
-}
-[data-testid="exact-copy-rule"] p:last-child::after {
-  content: "Rohly reads, schedules, and sends your CSV text without generating or rewriting it.";
-  font-size: 11px;
-  line-height: 1.55;
-}
-@layer base {
-  ::selection { background: rgb(237 233 254); color: rgb(46 16 101); }
-  table th { letter-spacing: .045em; }
+body {
+  margin: 0;
+  background: #07090E;
+  color: #F8FAFC;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv01";
 }
 
-/* Rohly premium SaaS polish */
-@layer base {
-  body { background: #f8f9fb; }
-  button, a { -webkit-tap-highlight-color: transparent; }
-  table tbody tr { transition: background-color 120ms ease; }
+::selection {
+  background: rgba(255, 90, 31, 0.85);
+  color: #07090E;
 }
 
-@layer components {
-  .rohly-scrollbar { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #07090E;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 8px;
+  border: 2px solid #07090E;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF5A1F;
 }
 
-/* Rohly 2026 visual system — approved mockup direction */
-@layer base {
-  body { background: #f7f8fc; color: #101828; }
+.font-display { font-family: 'Clash Display', system-ui, sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* film grain overlay */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: -50%;
+  z-index: 60;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.05;
 }
-@layer components {
-  .rohly-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
-  .rohly-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
 }
 
-
-/* Rohly dark mode compatibility layer.
-   Existing screens still use Tailwind slate/white utilities, so these scoped
-   overrides make the whole product theme-aware while pages migrate to tokens. */
-.dark body { background: #080d1a; color: #e5e7eb; color-scheme: dark; }
-.dark .rohly-app-bg { background: #080d1a !important; color: #e5e7eb !important; }
-.dark .bg-white, .dark .bg-white\/95 { background-color: #111827 !important; }
-.dark .bg-slate-50, .dark .bg-slate-50\/70, .dark .bg-slate-50\/60 { background-color: #0f172a !important; }
-.dark .bg-slate-100 { background-color: #1e293b !important; }
-.dark .border-slate-100, .dark .border-slate-200, .dark .border-indigo-100, .dark .border-indigo-100\/80 { border-color: #263247 !important; }
-.dark .text-slate-950, .dark .text-slate-900, .dark .text-slate-800 { color: #f1f5f9 !important; }
-.dark .text-slate-700, .dark .text-slate-600 { color: #cbd5e1 !important; }
-.dark .text-slate-500, .dark .text-slate-400 { color: #94a3b8 !important; }
-.dark input, .dark textarea, .dark select { background-color: #0f172a; border-color: #334155; color: #e2e8f0; }
-.dark input::placeholder, .dark textarea::placeholder { color: #64748b; }
-.dark table thead { background-color: #0f172a !important; }
-.dark table tbody tr:hover { background-color: #162033 !important; }
-.dark .shadow-xl, .dark .shadow-2xl { --tw-shadow-color: rgb(0 0 0 / 0.45); }
-.dark [data-testid="desktop-sidebar"] { background: rgba(15, 23, 42, .97) !important; border-color: #263247 !important; }
-.dark [data-testid="desktop-sidebar"] .text-slate-600 { color: #aebbd0 !important; }
-.dark [data-testid="desktop-sidebar"] a:hover { background-color: rgba(99, 102, 241, .12) !important; }
-.dark [data-testid="desktop-sidebar"] .rohly-option-active { background: linear-gradient(90deg, rgba(79,70,229,.25), rgba(14,165,233,.12)) !important; color: #c7d2fe !important; }
-.dark [data-testid="command-palette"], .dark [data-testid="profile-menu"], .dark [data-testid="notifications-panel"], .dark [data-testid="help-panel"] { background-color: #111827 !important; border-color: #334155 !important; color: #e5e7eb !important; }
-.dark .rohly-scrollbar { scrollbar-color: #475569 transparent; }
-
-
-/* Dark-mode contrast fixes: selected/list states must not keep light-theme fills. */
-.dark .bg-indigo-50,
-.dark .bg-indigo-50\/70,
-.dark .bg-indigo-50\/50 {
-  background-color: rgba(49, 46, 129, .28) !important;
+.glass {
+  background: rgba(13, 17, 26, 0.72);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
-.dark .hover\:bg-slate-50:hover { background-color: #172033 !important; }
-.dark .hover\:bg-indigo-50\/70:hover { background-color: rgba(49, 46, 129, .24) !important; }
-.dark .text-indigo-800 { color: #c7d2fe !important; }
-.dark .text-indigo-700, .dark .text-indigo-600 { color: #a5b4fc !important; }
-.dark .border-indigo-200, .dark .border-indigo-300 { border-color: #4f46e5 !important; }
-.dark .bg-amber-50 { background-color: rgba(120, 53, 15, .24) !important; }
-.dark .text-amber-700 { color: #fcd34d !important; }
-.dark .border-amber-200 { border-color: rgba(245, 158, 11, .42) !important; }
-.dark [data-testid="master-inbox-page"] { background: #0b1220 !important; }
-.dark [data-testid="master-inbox-page"] button { color: inherit; }
+
+.signal-glow {
+  box-shadow: 0 0 25px rgba(255, 90, 31, 0.25);
+}
+
+.mask-reveal {
+  display: block;
+  clip-path: inset(0 0 100% 0);
+  animation: mask-up 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mask-up {
+  to { clip-path: inset(0 0 -12% 0); }
+}
+
+.duotone {
+  filter: grayscale(1) contrast(1.15) brightness(0.72);
+}
+
+input:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: none;
+}
+
+.transition-signal {
+  transition-property: background-color, border-color, color, box-shadow, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
