@@ -218,7 +218,7 @@ export default function Campaigns() {
                     <th className="px-4 py-3">Sent</th>
                     <th className="px-4 py-3">Opened</th><th className="px-4 py-3">Replied</th><th className="px-4 py-3">Positive</th>
                     <th className="px-4 py-3">Failed</th>
-                    
+
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -242,7 +242,7 @@ export default function Campaigns() {
                         <td className="px-4 py-3 font-medium ref-sent">{c.sent}</td>
                         <td className="px-4 py-3 ref-opened">{c.opens ?? "—"}</td><td className="px-4 py-3"><span className="cp-replies">{c.replies}</span></td><td className="px-4 py-3 ref-positive">{c.positive}</td>
                         <td className="px-4 py-3 text-red-500">{c.failed}</td>
-                        
+
                         <td className="px-4 py-3 text-right">
                           <button onClick={() => renameCampaign(c)} title="Rename campaign" aria-label={`Rename ${c.name}`} className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><Pencil size={12} /> Rename</button>
                           <Link to={`/campaigns/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700">View <ArrowUpRight size={12} /></Link>
