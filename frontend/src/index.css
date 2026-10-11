@@ -56,7 +56,7 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.55 0.24 292);
+    --primary: oklch(0.68 0.19 42);
     --primary-foreground: oklch(0.985 0 0);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
@@ -67,7 +67,7 @@
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.55 0.20 292);
+    --ring: oklch(0.72 0.16 42);
     --chart-1: oklch(0.55 0.2 264);
     --chart-2: oklch(0.69 0.16 155);
     --chart-3: oklch(0.72 0.15 74);
@@ -132,7 +132,7 @@
     font-family: 'Geist Variable', sans-serif;
   }
   button, a, input, select, textarea {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600/25 focus-visible:ring-offset-1;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 focus-visible:ring-offset-1;
   }
 }
 
@@ -230,3 +230,39 @@
 }
 .rohly-landing h1, .rohly-landing h2, .rohly-landing h3 { font-family: 'Outfit Variable', sans-serif; }
 .rohly-landing ::selection { background: rgba(249, 91, 29, .4); color: white; }
+
+
+/* Rohly visual system — light workspace, restrained orange accent, readable data surfaces. */
+:root {
+  color-scheme: light;
+  --rohly-accent: #f97316;
+  --rohly-accent-hover: #ea580c;
+  --rohly-ink: #172033;
+  --rohly-muted: #64748b;
+  --rohly-border: #e2e8f0;
+  --rohly-canvas: #f7f8fa;
+}
+body { background: var(--rohly-canvas); }
+::selection { background: #ffedd5; color: #7c2d12; }
+html { scroll-behavior: smooth; }
+button, a, input, select, textarea {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 140ms;
+}
+:focus-visible { outline-color: var(--rohly-accent); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #f8fafc; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border: 2px solid #f8fafc; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+.rohly-app-bg { background: var(--rohly-canvas); }
+.rohly-app-bg [data-testid="app-scroll-viewport"] { scrollbar-gutter: stable; }
+.rohly-app-bg [data-testid="topbar"] { color: var(--rohly-ink); }
+.rohly-app-bg [data-testid="desktop-sidebar"] { border-right-color: #e5e7eb; }
+.rohly-app-bg .rohly-option-active { position: relative; font-weight: 650; }
+.rohly-app-bg .rohly-option-active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 999px 999px 0; background: var(--rohly-accent); }
+.rohly-landing { font-family: 'Geist Variable', sans-serif; }
+.rohly-landing h1, .rohly-landing h2, .rohly-landing h3 { font-family: 'Outfit Variable', sans-serif; }
+.rohly-landing a:focus-visible { outline: 2px solid var(--rohly-accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

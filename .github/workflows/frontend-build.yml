@@ -1,0 +1,32 @@
+name: Frontend build
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-build.yml"
+  push:
+    branches:
+      - main
+      - "redesign/**"
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-build.yml"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --ignore-scripts
+      - name: Build frontend
+        run: yarn vite build
